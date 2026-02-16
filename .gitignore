@@ -1,4 +1,7 @@
 .DS_Store
 processing_log.txt
+qbt_trigger.log
+qbt_trigger.log.old
+logs/jobs/
 tools/
 dovi_tool/
