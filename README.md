@@ -35,6 +35,18 @@ This project converts Dolby Vision Profile 7 MKV files to Profile 8 and includes
 - `dovi_tool` (found via system `PATH`, `tools/dovi_tool`, or `dovi_tool/target/release/dovi_tool`).
 - For `qbt_autorun_wrapper.sh`: `curl`, `jq`, `find`, `sha1sum`.
 
+## Public Repo Setup
+
+This repo supports `.env` configuration to avoid committing machine-specific paths.
+
+```bash
+cp .env.example .env
+# Edit .env with your local paths and NAS mount points
+```
+
+Both `DV7toDV8.sh` and `qbt_autorun_wrapper.sh` auto-load `.env` from repo root.
+You can point to a different env file with `DV8_ENV_FILE=/path/to/file.env`.
+
 ## Usage
 
 ### Standard DV7 to DV8 conversion
@@ -89,12 +101,13 @@ Behavior summary:
 - Optionally stops/removes converted torrents in qBittorrent while keeping files (`DV8_QBT_REMOVE_CONVERTED=true`).
 - Normalizes `/NAS/...` and `/media/NAS/...` paths when one mount alias is missing.
 
-Important: `qbt_autorun_wrapper.sh` contains absolute paths in `SCRIPT` and `BASE_DIR`. Update them if you move the repository.
-
 ## Environment Variables
 
 ### Converter / launcher
 
+- `DV8_ENV_FILE`: optional path to env file (default `<repo>/.env`).
+- `DV8_BASE_DIR`: repo base directory (default wrapper script directory).
+- `DV8_SCRIPT_PATH`: converter launcher path (default `$DV8_BASE_DIR/DV7toDV8.sh`).
 - `DV8_CONVERTER_BIN`: force converter binary path.
 - `DV8_EL_RPU_DIR`: archive directory override (default `/NAS/EL_RPU/` or `/media/NAS/EL_RPU/`).
 - `DV8_PROCESSING_LOG_FILE`: conversion log path override.
@@ -106,6 +119,7 @@ Important: `qbt_autorun_wrapper.sh` contains absolute paths in `SCRIPT` and `BAS
 - `DV8_MAX_PARALLEL_JOBS` (default `1`)
 - `DV8_QUEUE_WAIT_SECONDS` (default `15`)
 - `DV8_JOB_LOG_RETENTION_DAYS` (default `30`)
+- `DV8_TRIGGER_LOG_FILE` (default `$DV8_BASE_DIR/qbt_trigger.log`)
 - `DV8_TRIGGER_LOG_MAX_BYTES` (default `10485760`)
 - `DV8_RUN_DIR` (default `/tmp/dv8-qbt`)
 - `DV8_QBT_API_URL` (default `http://127.0.0.1:8080`)

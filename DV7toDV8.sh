@@ -3,6 +3,13 @@ set -o pipefail
 
 rawDir="$(cd -- "$(dirname -- "$0")" &>/dev/null && pwd)"
 scriptDir="$(realpath "$rawDir")"
+envFile="${DV8_ENV_FILE:-$scriptDir/.env}"
+if [[ -f "$envFile" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$envFile"
+  set +a
+fi
 manifestPath="$scriptDir/dv8_converter/Cargo.toml"
 
 bundledBin="$scriptDir/tools/dv8_converter"
