@@ -1,58 +1,132 @@
 # DV7 to DV8 Conversion Toolkit
 
-This repository provides a Bash-based workflow to convert Dolby Vision Profile 7 MKVs into Profile 8 MKVs.
+This project converts Dolby Vision Profile 7 MKV files to Profile 8 and includes an automation wrapper for qBittorrent workflows.
 
-## What It Does
-- Detects DV7 files with `mediainfo`.
-- Extracts video, demuxes EL/RPU, converts metadata to DV8 via `dovi_tool`, and remuxes the final MKV.
-- Optionally archives the original DV7 EL+RPU stream.
-- Supports single-file and recursive directory processing.
+## Overview
+
+- `DV7toDV8.sh` is now a launcher for the Rust converter (`dv8_converter`).
+- `dv8_converter` performs detection, extraction, DV metadata processing (`dovi_tool`), remux, validation, and cleanup.
+- `qbt_autorun_wrapper.sh` runs queued background jobs with locking, per-job logs, and optional qBittorrent cleanup.
+
+`DV7toDV8.sh` tries converters in this order:
+
+1. `DV8_CONVERTER_BIN` (if set)
+2. `tools/dv8_converter`
+3. `dv8_converter/target/release/dv8_converter`
+4. `$CARGO_TARGET_DIR/release/dv8_converter` (if `CARGO_TARGET_DIR` is set)
+5. Build from source with `cargo build --release --manifest-path dv8_converter/Cargo.toml`
 
 ## Repository Layout
-- `DV7toDV8.sh`: main conversion script.
-- `qbt_autorun_wrapper.sh`: queued/background wrapper for automated triggers.
-- `config/DV7toDV8.json`: `dovi_tool` conversion settings (currently mode 2, mapping removal).
-- `tools/`: bundled fallback binaries (`mkvextract`, `mkvmerge`, `mediainfo`, `dovi_tool`).
-- `dovi_tool/`: Rust source for upstream `dovi_tool` + `dolby_vision` crate.
-- `logs/jobs/`: per-job logs written by the wrapper.
+
+- `DV7toDV8.sh`: launcher and fallback build logic for `dv8_converter`.
+- `dv8_converter/`: Rust conversion engine.
+- `qbt_autorun_wrapper.sh`: queue/lock wrapper for torrent-triggered runs.
+- `config/DV7toDV8.json`: `dovi_tool` editor config used during conversion.
+- `tools/`: optional bundled binaries (`mkvextract`, `mkvmerge`, `mediainfo`, `dovi_tool`, `dv8_converter`).
+- `dovi_tool/`: upstream Rust source (`dovi_tool` + `dolby_vision` crate).
+- `logs/jobs/`: per-job wrapper logs.
 
 ## Requirements
-- Linux shell environment.
-- `mkvextract`, `mkvmerge`, `mediainfo`, and `dovi_tool`.
-- The scripts prefer system tools (`command -v`) and fall back to `tools/`.
 
-## Quick Start
+- Linux with `bash`.
+- `cargo` (required if no ready-to-run `dv8_converter` binary is available).
+- `mkvextract` and `mkvmerge` (MKVToolNix).
+- `mediainfo`.
+- `dovi_tool` (found via system `PATH`, `tools/dovi_tool`, or `dovi_tool/target/release/dovi_tool`).
+- For `qbt_autorun_wrapper.sh`: `curl`, `jq`, `find`, `sha1sum`.
+
+## Usage
+
+### Standard DV7 to DV8 conversion
+
 ```bash
-# Dry run first (no file modifications)
+# Dry run (no file changes)
 ./DV7toDV8.sh --dry-run /path/to/movie.mkv
 
 # Convert one file
 ./DV7toDV8.sh /path/to/movie.mkv
 
-# Convert all .mkv files under a directory
+# Convert recursively in a directory
 ./DV7toDV8.sh /path/to/folder
 ```
 
 Flags:
-- `-n`: do not archive DV7 EL+RPU output.
-- `-d` / `--debug`: verbose debug logging.
-- `--dry-run`: preview actions only.
+
+- `-n`: do not archive DV7 EL+RPU.
+- `-d`, `--debug`: verbose logging, including command traces.
+- `--dry-run`: preview mutating operations.
+- `-h`, `--help`: show usage.
+
+### Hybrid mode
+
+Inject Dolby Vision metadata from a DV source into an HDR target:
+
+```bash
+# Dry run
+./DV7toDV8.sh --hybrid --dry-run /path/to/dv_source.mkv /path/to/hdr_target.mkv
+
+# Convert with default output naming
+./DV7toDV8.sh --hybrid /path/to/dv_source.mkv /path/to/hdr_target.mkv
+
+# Convert with explicit output path
+./DV7toDV8.sh --hybrid -o /path/to/output.mkv /path/to/dv_source.mkv /path/to/hdr_target.mkv
+```
+
+## qBittorrent Wrapper
+
+Run wrapper per target path:
+
+```bash
+./qbt_autorun_wrapper.sh /NAS/Movies/My.File.mkv
+```
+
+Behavior summary:
+
+- Queues jobs with per-target and slot locks (`DV8_MAX_PARALLEL_JOBS`).
+- Writes index log to `qbt_trigger.log` and detailed logs to `logs/jobs/*.log`.
+- Treats `Not a DV7 file` as a non-fatal outcome.
+- Captures and repoints media hardlinks for converted files (`DV8_MEDIA_ROOTS`).
+- Optionally stops/removes converted torrents in qBittorrent while keeping files (`DV8_QBT_REMOVE_CONVERTED=true`).
+- Normalizes `/NAS/...` and `/media/NAS/...` paths when one mount alias is missing.
+
+Important: `qbt_autorun_wrapper.sh` contains absolute paths in `SCRIPT` and `BASE_DIR`. Update them if you move the repository.
 
 ## Environment Variables
-- `DV8_EL_RPU_DIR`: override archive directory (default `/NAS/EL_RPU/` or `/media/NAS/EL_RPU/`).
-- `DV8_PROCESSING_LOG_FILE`: override conversion log path.
-- `DV8_AUTORUN_DRY_RUN`, `DV8_MAX_PARALLEL_JOBS`, `DV8_QUEUE_WAIT_SECONDS`: wrapper behavior controls.
+
+### Converter / launcher
+
+- `DV8_CONVERTER_BIN`: force converter binary path.
+- `DV8_EL_RPU_DIR`: archive directory override (default `/NAS/EL_RPU/` or `/media/NAS/EL_RPU/`).
+- `DV8_PROCESSING_LOG_FILE`: conversion log path override.
+- `CARGO_TARGET_DIR`: optional target directory used by launcher fallback probing.
+
+### Wrapper
+
+- `DV8_AUTORUN_DRY_RUN` (default `false`)
+- `DV8_MAX_PARALLEL_JOBS` (default `1`)
+- `DV8_QUEUE_WAIT_SECONDS` (default `15`)
+- `DV8_JOB_LOG_RETENTION_DAYS` (default `30`)
+- `DV8_TRIGGER_LOG_MAX_BYTES` (default `10485760`)
+- `DV8_RUN_DIR` (default `/tmp/dv8-qbt`)
+- `DV8_QBT_API_URL` (default `http://127.0.0.1:8080`)
+- `DV8_QBT_REMOVE_CONVERTED` (default `true`)
+- `DV8_MEDIA_ROOTS` (default `/NAS/Movies:/NAS/TV Shows:/media/NAS/Movies:/media/NAS/TV Shows`)
+- `DV8_EL_RPU_DIR` (passed through to converter)
 
 ## Safety Notes
-- On successful conversion, `DV7toDV8.sh` deletes the original input MKV.
-- The script keeps the source if output is empty or suspiciously small.
-- Always run `--dry-run` and validate output naming/path behavior before batch processing.
 
-## Build `dovi_tool` From Source (Optional)
+- Standard mode deletes the original input only after successful output validation.
+- Hybrid mode deletes both source files only after validation succeeds.
+- `--dry-run` skips mutating commands and is recommended before batch runs.
+
+## Development
+
 ```bash
+# Build converter
+cargo build --release --manifest-path dv8_converter/Cargo.toml
+
+# Optional: build/test upstream dovi_tool
 cd dovi_tool
 cargo build --release
 cargo test --all-features
 ```
-
-If this repository is moved, update absolute paths in `qbt_autorun_wrapper.sh` (`SCRIPT` and `BASE_DIR`).
