@@ -5,3 +5,4 @@ qbt_trigger.log.old
 logs/jobs/
 tools/
 dovi_tool/
+dv8_converter/target/
