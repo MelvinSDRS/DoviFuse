@@ -1,9 +1,18 @@
 #!/bin/bash
 set -u
 
-SCRIPT="/home/msiadous/Proj/DV8/DV7toDV8.sh"
-BASE_DIR="/home/msiadous/Proj/DV8"
-LOG_FILE="$BASE_DIR/qbt_trigger.log"
+script_dir="$(cd -- "$(dirname -- "$0")" &>/dev/null && pwd)"
+env_file="${DV8_ENV_FILE:-$script_dir/.env}"
+if [[ -f "$env_file" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+fi
+
+BASE_DIR="${DV8_BASE_DIR:-$script_dir}"
+SCRIPT="${DV8_SCRIPT_PATH:-$BASE_DIR/DV7toDV8.sh}"
+LOG_FILE="${DV8_TRIGGER_LOG_FILE:-$BASE_DIR/qbt_trigger.log}"
 LOG_MAX_BYTES="${DV8_TRIGGER_LOG_MAX_BYTES:-10485760}"
 JOB_LOG_DIR="$BASE_DIR/logs/jobs"
 RUN_DIR="${DV8_RUN_DIR:-/tmp/dv8-qbt}"
@@ -224,6 +233,11 @@ sanitize_name() {
   name=$(echo "$name" | sed -E 's/[^A-Za-z0-9._-]+/_/g')
   echo "${name:0:80}"
 }
+
+if [[ ! -x "$SCRIPT" ]]; then
+  write_index "ERROR: DV7toDV8 launcher is not executable: $SCRIPT"
+  exit 1
+fi
 
 qbt_find_hash_by_target() {
   local target="$1"

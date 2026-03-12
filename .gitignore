@@ -1,4 +1,6 @@
 .DS_Store
+.env
+.env.local
 processing_log.txt
 qbt_trigger.log
 qbt_trigger.log.old
