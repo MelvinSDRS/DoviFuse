@@ -46,6 +46,9 @@ JOB_LOG_RETENTION_DAYS="${DV8_JOB_LOG_RETENTION_DAYS:-30}"
 QBT_API_URL="${DV8_QBT_API_URL:-http://127.0.0.1:8080}"
 QBT_REMOVE_CONVERTED="${DV8_QBT_REMOVE_CONVERTED:-true}"
 MEDIA_ROOTS_CSV="${DV8_MEDIA_ROOTS:-/NAS/Movies:/NAS/TV Shows:/media/NAS/Movies:/media/NAS/TV Shows}"
+TELEGRAM_BOT_TOKEN="${DV8_TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_CHAT_ID="${DV8_TELEGRAM_CHAT_ID:-}"
+TELEGRAM_THREAD_ID="${DV8_TELEGRAM_THREAD_ID:-}"
 
 mkdir -p "$(dirname "$LOG_FILE")" "$JOB_LOG_DIR"
 
@@ -77,6 +80,18 @@ if [[ ! "$JOB_LOG_RETENTION_DAYS" =~ ^[0-9]+$ ]] || (( JOB_LOG_RETENTION_DAYS < 
 fi
 
 now() { date '+%F %T'; }
+
+send_telegram_notification() {
+  local text="$1"
+  [[ -n "$TELEGRAM_BOT_TOKEN" && -n "$TELEGRAM_CHAT_ID" ]] || return 0
+
+  local -a curl_args=(-s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}"
+    --data-urlencode "text=${text}")
+  [[ -n "$TELEGRAM_THREAD_ID" ]] && curl_args+=(--data-urlencode "message_thread_id=${TELEGRAM_THREAD_ID}")
+
+  curl "${curl_args[@]}" >/dev/null 2>&1 || echo "$(now) - WARNING: failed to send Telegram notification"
+}
 
 map_mount_alias() {
   local path="$1"
@@ -415,6 +430,17 @@ write_index "Accepted target=$TARGET job_log=$JOB_LOG max_parallel=$MAX_PARALLEL
       write_index "Converted cleanup failed target=$TARGET"
     fi
   fi
+
+  notify_text=""
+  if [[ "$rc" -ne 0 ]]; then
+    notify_text="❌ Download finished: $(basename "$TARGET") - conversion failed (rc=$rc)"
+  elif [[ "$converted" == "true" ]]; then
+    notify_text="✅ Download and conversion finished: $(basename "$TARGET")"
+  else
+    notify_text="ℹ️ Download finished: $(basename "$TARGET") - no conversion needed"
+  fi
+  [[ "$DRY_RUN_FLAG" == "true" ]] && notify_text="$notify_text (dry run)"
+  send_telegram_notification "$notify_text"
 
   echo "$(now) - Completed rc=$rc"
   write_index "Completed rc=$rc target=$TARGET slot=${SLOT_NUMBER:-n/a} job_log=$JOB_LOG"
