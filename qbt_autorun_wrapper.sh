@@ -4,10 +4,26 @@ set -u
 script_dir="$(cd -- "$(dirname -- "$0")" &>/dev/null && pwd)"
 env_file="${DV8_ENV_FILE:-$script_dir/.env}"
 if [[ -f "$env_file" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$env_file"
-  set +a
+  # Parse KEY=VALUE lines without shell-evaluating the file.
+  while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+    line="${raw_line%$'\r'}"
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" == *=* ]] || continue
+
+    key="${line%%=*}"
+    val="${line#*=}"
+
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    if [[ "$val" =~ ^\".*\"$ ]]; then
+      val="${val:1:${#val}-2}"
+    elif [[ "$val" =~ ^\'.*\'$ ]]; then
+      val="${val:1:${#val}-2}"
+    fi
+
+    export "$key=$val"
+  done < "$env_file"
 fi
 
 BASE_DIR="${DV8_BASE_DIR:-$script_dir}"
@@ -103,14 +119,13 @@ map_archive_dir() {
 
 IFS=':' read -r -a MEDIA_ROOTS <<< "$MEDIA_ROOTS_CSV"
 
-snapshot_existing_hardlinks() {
+snapshot_source_inodes() {
   local snapshot_file="$1"
   local target="$2"
   : > "$snapshot_file"
 
   local -a candidates=()
-  local file root hardlink_path
-  local -a links=()
+  local file dev inode
 
   if [[ -f "$target" ]]; then
     candidates+=("$target")
@@ -122,61 +137,88 @@ snapshot_existing_hardlinks() {
 
   for file in "${candidates[@]}"; do
     [[ -f "$file" ]] || continue
-    links=()
-
-    for root in "${MEDIA_ROOTS[@]}"; do
-      [[ -d "$root" ]] || continue
-      while IFS= read -r -d '' hardlink_path; do
-        [[ "$hardlink_path" == "$file" ]] && continue
-        links+=("$hardlink_path")
-      done < <(find "$root" -xdev -type f -samefile "$file" -print0 2>/dev/null)
-    done
-
-    if (( ${#links[@]} > 0 )); then
-      printf '%s\t' "$file" >> "$snapshot_file"
-      printf '%s|' "${links[@]}" >> "$snapshot_file"
-      printf '\n' >> "$snapshot_file"
-    fi
+    dev=$(stat -c '%d' "$file" 2>/dev/null || true)
+    inode=$(stat -c '%i' "$file" 2>/dev/null || true)
+    [[ -n "$dev" && -n "$inode" ]] || continue
+    printf '%s\t%s\t%s\n' "$file" "$dev" "$inode" >> "$snapshot_file"
   done
 }
 
 repoint_hardlinks_from_snapshot() {
   local snapshot_file="$1"
-  local job_log="$2"
-  local src dst links_blob
-  local -a link_paths=()
+  local conversion_map="$2"
+  local src dst src_dev src_inode root root_dev
   local link tmp replaced_count
   replaced_count=0
 
   [[ -s "$snapshot_file" ]] || return 0
-  [[ -s "$job_log" ]] || return 0
+  [[ -s "$conversion_map" ]] || return 0
 
   while IFS=$'\t' read -r src dst; do
     [[ -n "$src" && -n "$dst" ]] || continue
     [[ -f "$dst" ]] || continue
 
-    links_blob=$(awk -F'\t' -v key="$src" '$1==key { print $2; exit }' "$snapshot_file")
-    [[ -n "$links_blob" ]] || continue
+    src_dev=$(awk -F'\t' -v key="$src" '$1==key { print $2; exit }' "$snapshot_file")
+    src_inode=$(awk -F'\t' -v key="$src" '$1==key { print $3; exit }' "$snapshot_file")
+    [[ -n "$src_dev" && -n "$src_inode" ]] || continue
 
-    IFS='|' read -r -a link_paths <<< "$links_blob"
-    for link in "${link_paths[@]}"; do
-      [[ -n "$link" ]] || continue
-      [[ -e "$link" ]] || continue
+    for root in "${MEDIA_ROOTS[@]}"; do
+      [[ -d "$root" ]] || continue
+      root_dev=$(stat -c '%d' "$root" 2>/dev/null || true)
+      [[ "$root_dev" == "$src_dev" ]] || continue
 
-      tmp="${link}.dv8link.$$"
-      rm -f "$tmp" 2>/dev/null || true
-      if ln "$dst" "$tmp" 2>/dev/null && mv -f "$tmp" "$link" 2>/dev/null; then
-        replaced_count=$((replaced_count + 1))
-      else
+      while IFS= read -r -d '' link; do
+        [[ -n "$link" ]] || continue
+        [[ -e "$link" ]] || continue
+
+        tmp="${link}.dv8link.$$"
         rm -f "$tmp" 2>/dev/null || true
-        echo "$(now) - WARNING: failed to relink media hardlink '$link' -> '$dst'"
-      fi
+        if ln "$dst" "$tmp" 2>/dev/null && mv -f "$tmp" "$link" 2>/dev/null; then
+          replaced_count=$((replaced_count + 1))
+        else
+          rm -f "$tmp" 2>/dev/null || true
+          echo "$(now) - WARNING: failed to relink media hardlink '$link' -> '$dst'"
+        fi
+      done < <(find "$root" -xdev -type f -inum "$src_inode" -print0 2>/dev/null)
     done
-  done < <(sed -nE 's/^.* - (.*) processed successfully -> (.*)$/\1\t\2/p' "$job_log")
+  done < "$conversion_map"
 
   if (( replaced_count > 0 )); then
     echo "$(now) - Media relink completed: $replaced_count hardlink(s) now point to converted file(s)"
   fi
+}
+
+extract_conversion_pairs() {
+  local snapshot_file="$1"
+  local job_log="$2"
+  local line_count src dst src_guess
+
+  [[ -s "$job_log" ]] || return 0
+
+  line_count=$(wc -l < "$snapshot_file" 2>/dev/null || echo 0)
+
+  # Legacy converter marker.
+  sed -nE 's/^.* - (.*) processed successfully -> (.*)$/\1\t\2/p' "$job_log"
+
+  # New converter marker: "Done: /path/to/output.DV8.mkv" (possibly with ANSI colors).
+  while IFS= read -r dst; do
+    [[ -n "$dst" ]] || continue
+    src_guess=""
+    if [[ "$dst" == *.DV8.mkv ]]; then
+      src_guess="${dst%.DV8.mkv}.mkv"
+    fi
+
+    if [[ -n "$src_guess" ]] && awk -F'\t' -v key="$src_guess" '$1==key { found=1 } END { exit(found ? 0 : 1) }' "$snapshot_file"; then
+      printf '%s\t%s\n' "$src_guess" "$dst"
+      continue
+    fi
+
+    # Fallback for single-file targets when name mapping is ambiguous.
+    if [[ "$line_count" -eq 1 ]]; then
+      src=$(cut -f1 "$snapshot_file")
+      [[ -n "$src" ]] && printf '%s\t%s\n' "$src" "$dst"
+    fi
+  done < <(sed -nE 's/\x1B\[[0-9;]*m//g; s/^Done: (.*)$/\1/p' "$job_log")
 }
 
 rotate_log() {
@@ -312,11 +354,11 @@ write_index "Accepted target=$TARGET job_log=$JOB_LOG max_parallel=$MAX_PARALLEL
   echo "$(now) - File lock acquired"
 
   SNAPSHOT_FILE="$RUN_DIR/snapshot-$job_id.tsv"
-  snapshot_existing_hardlinks "$SNAPSHOT_FILE" "$TARGET"
+  snapshot_source_inodes "$SNAPSHOT_FILE" "$TARGET"
   if [[ -s "$SNAPSHOT_FILE" ]]; then
-    echo "$(now) - Hardlink snapshot captured: $(wc -l < "$SNAPSHOT_FILE") source entrie(s)"
+    echo "$(now) - Inode snapshot captured: $(wc -l < "$SNAPSHOT_FILE") source entrie(s)"
   else
-    echo "$(now) - Hardlink snapshot captured: none"
+    echo "$(now) - Inode snapshot captured: none"
   fi
 
   while true; do
@@ -346,8 +388,11 @@ write_index "Accepted target=$TARGET job_log=$JOB_LOG max_parallel=$MAX_PARALLEL
   fi
   rc=$?
 
+  CONVERSION_MAP_FILE="$RUN_DIR/conversion-map-$job_id.tsv"
+  extract_conversion_pairs "$SNAPSHOT_FILE" "$JOB_LOG" | awk -F'\t' 'NF==2 && !seen[$0]++ { print }' > "$CONVERSION_MAP_FILE"
+
   converted=false
-  if grep -Eq 'processed successfully ->|[1-9][0-9]* file\(s\) converted\.' "$JOB_LOG" 2>/dev/null; then
+  if [[ -s "$CONVERSION_MAP_FILE" ]] || grep -Eq '[1-9][0-9]* file\(s\) converted\.' "$JOB_LOG" 2>/dev/null; then
     converted=true
   fi
 
@@ -357,7 +402,7 @@ write_index "Accepted target=$TARGET job_log=$JOB_LOG max_parallel=$MAX_PARALLEL
   fi
 
   if [[ "$converted" == "true" && "$DRY_RUN_FLAG" != "true" ]]; then
-    repoint_hardlinks_from_snapshot "$SNAPSHOT_FILE" "$JOB_LOG"
+    repoint_hardlinks_from_snapshot "$SNAPSHOT_FILE" "$CONVERSION_MAP_FILE"
   fi
 
   if [[ "$converted" == "true" && "$QBT_REMOVE_CONVERTED" == "true" && "$DRY_RUN_FLAG" != "true" ]]; then
@@ -374,6 +419,7 @@ write_index "Accepted target=$TARGET job_log=$JOB_LOG max_parallel=$MAX_PARALLEL
   echo "$(now) - Completed rc=$rc"
   write_index "Completed rc=$rc target=$TARGET slot=${SLOT_NUMBER:-n/a} job_log=$JOB_LOG"
   rm -f "$SNAPSHOT_FILE" 2>/dev/null || true
+  rm -f "$CONVERSION_MAP_FILE" 2>/dev/null || true
   exit "$rc"
 ) >> "$JOB_LOG" 2>&1 &
 
