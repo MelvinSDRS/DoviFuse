@@ -1,62 +1,14 @@
+use crate::cli::HybridOptions;
 use crate::logger::Logger;
 use crate::mediainfo::{fps_from_info, HybridMediaInfo};
 
-pub(crate) fn compare_brightness_signature(
-    dv: &HybridMediaInfo,
-    hdr: &HybridMediaInfo,
-) -> Option<bool> {
-    let dv_values = (
-        dv.max_cll,
-        dv.max_fall,
-        dv.mastering_min_nits,
-        dv.mastering_max_nits,
-    );
-    let hdr_values = (
-        hdr.max_cll,
-        hdr.max_fall,
-        hdr.mastering_min_nits,
-        hdr.mastering_max_nits,
-    );
-
-    let hdr_has_any = hdr_values.0.is_some()
-        || hdr_values.1.is_some()
-        || hdr_values.2.is_some()
-        || hdr_values.3.is_some();
-    if !hdr_has_any {
-        return None;
-    }
-
-    let dv_has_any = dv_values.0.is_some()
-        || dv_values.1.is_some()
-        || dv_values.2.is_some()
-        || dv_values.3.is_some();
-
-    if !dv_has_any {
-        return Some(false);
-    }
-
-    let same_cll = dv_values.0 == hdr_values.0;
-    let same_fall = dv_values.1 == hdr_values.1;
-
-    let same_min = match (dv_values.2, hdr_values.2) {
-        (Some(a), Some(b)) => (a - b).abs() < 0.0001,
-        (None, None) => true,
-        _ => false,
-    };
-
-    let same_max = match (dv_values.3, hdr_values.3) {
-        (Some(a), Some(b)) => (a - b).abs() < 0.001,
-        (None, None) => true,
-        _ => false,
-    };
-
-    Some(same_cll && same_fall && same_min && same_max)
-}
+use super::grade::{static_grade_verdict, Verdict};
 
 pub(crate) fn hybrid_preflight_checks(
     dv_info: &HybridMediaInfo,
     hdr_info: &HybridMediaInfo,
     dv_profile: Option<u8>,
+    opts: &HybridOptions,
     logger: &Logger,
 ) -> bool {
     logger.step("Preflight checks");
@@ -249,16 +201,19 @@ pub(crate) fn hybrid_preflight_checks(
         logger.preflight_status("WARN", "13. Transfer characteristics are not PQ");
     }
 
-    match compare_brightness_signature(dv_info, hdr_info) {
-        Some(true) => logger.preflight_status("PASS", "14. Brightness metadata matches"),
-        Some(false) => logger.preflight_status(
-            "WARN",
-            "14. Brightness metadata differs - RPU L6 will be updated to match HDR target",
-        ),
-        None => logger.preflight_status(
-            "WARN",
-            "14. HDR target brightness metadata missing - L6 override will be skipped",
-        ),
+    let (verdict, msg) = static_grade_verdict(
+        dv_info,
+        hdr_info,
+        opts.grade_check,
+        opts.skip_grade_check,
+    );
+    match verdict {
+        Verdict::Pass => logger.preflight_status("PASS", &format!("14. {msg}")),
+        Verdict::Warn => logger.preflight_status("WARN", &format!("14. {msg}")),
+        Verdict::Fail => {
+            logger.preflight_status("FAIL", &format!("14. {msg}"));
+            has_fail = true;
+        }
     }
 
     if has_fail {
