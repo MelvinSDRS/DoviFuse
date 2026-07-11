@@ -201,12 +201,8 @@ pub(crate) fn hybrid_preflight_checks(
         logger.preflight_status("WARN", "13. Transfer characteristics are not PQ");
     }
 
-    let (verdict, msg) = static_grade_verdict(
-        dv_info,
-        hdr_info,
-        opts.grade_check,
-        opts.skip_grade_check,
-    );
+    let (verdict, msg) =
+        static_grade_verdict(dv_info, hdr_info, opts.grade_check, opts.skip_grade_check);
     match verdict {
         Verdict::Pass => logger.preflight_status("PASS", &format!("14. {msg}")),
         Verdict::Warn => logger.preflight_status("WARN", &format!("14. {msg}")),

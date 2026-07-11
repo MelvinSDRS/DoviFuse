@@ -54,11 +54,7 @@ fn compute_alignment(
     logger: &Logger,
 ) -> AppResult<AlignmentStrategy> {
     if opts.sync == SyncMode::Framecount {
-        return Ok(compute_alignment_framecount(
-            dv_rpu_frames,
-            hdr_frames,
-            fps,
-        ));
+        return Ok(compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps));
     }
 
     let dv_cuts = export_dv_scene_cuts(hybrid_rpu, dv_scenes_txt, rt, logger)?;
@@ -99,9 +95,7 @@ fn compute_alignment(
             alignment_from_offset(sync.offset, dv_rpu_frames, hdr_frames)
         }
         None => {
-            let reason = report
-                .rejection
-                .unwrap_or_else(|| "unknown".to_string());
+            let reason = report.rejection.unwrap_or_else(|| "unknown".to_string());
             logger.warn(&format!("Scene-cut correlation rejected: {reason}"));
             logger.warn(&format!(
                 "  DV cuts: {}, HDR cuts: {}, top offsets: {:?}",
@@ -113,14 +107,9 @@ fn compute_alignment(
                 hdr_scenes_txt.display()
             ));
             if opts.force {
-                logger.warn(
-                    "--force: falling back to the frame-count heuristic (sync NOT verified)",
-                );
-                Ok(compute_alignment_framecount(
-                    dv_rpu_frames,
-                    hdr_frames,
-                    fps,
-                ))
+                logger
+                    .warn("--force: falling back to the frame-count heuristic (sync NOT verified)");
+                Ok(compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps))
             } else {
                 Err(format!(
                     "Scene-cut sync failed: {reason}. Re-run with --force to use the frame-count heuristic, or --sync framecount."
@@ -198,14 +187,31 @@ pub(crate) fn process_hybrid(
     // sync-verification failure leaves it behind for inspection.
     let verify_scenes_txt = tmp_dir.join(format!("{base}.hybrid.verify_scenes.txt"));
 
+    // These paths are deterministic per target, and the CleanupGuard deletes
+    // them on any failure. Refuse to adopt files this run did not create:
+    // they belong to a concurrent conversion of the same target or to a
+    // hard-killed run the user should inspect. (The scene lists are exempt -
+    // they are kept on failure by design and simply overwritten on retry.)
+    let intermediates = [
+        &hybrid_rpu,
+        &hybrid_aligned_rpu,
+        &hybrid_hevc,
+        &hybrid_injected_hevc,
+        &hybrid_editor_json,
+        &hybrid_l5_json,
+        &verify_rpu,
+    ];
+    if let Some(existing) = intermediates.iter().find(|p| p.exists()) {
+        return Err(format!(
+            "Intermediate file already exists: {} - another conversion of this target may be running, or a previous run was killed. Remove the stale {base}.hybrid.* files to proceed.",
+            existing.display()
+        ));
+    }
+
     let mut cleanup = CleanupGuard::new(logger.clone());
-    cleanup.add(&hybrid_rpu);
-    cleanup.add(&hybrid_aligned_rpu);
-    cleanup.add(&hybrid_hevc);
-    cleanup.add(&hybrid_injected_hevc);
-    cleanup.add(&hybrid_editor_json);
-    cleanup.add(&hybrid_l5_json);
-    cleanup.add(&verify_rpu);
+    for path in intermediates {
+        cleanup.add(path);
+    }
 
     logger.step("0 | Determine output path");
     logger.ok(&format!("Hybrid output: {}", output_path.display()));
@@ -357,18 +363,16 @@ pub(crate) fn process_hybrid(
                 .duration_ms
                 .map(|ms| ms / 1000.0)
                 .unwrap_or_else(|| hdr_info.frame_count as f64 / fps.max(1.0));
-            let windows =
-                crate::ffmpeg::sample_windows(duration_s, opts.grade_windows, 5.0);
+            let windows = crate::ffmpeg::sample_windows(duration_s, opts.grade_windows, 5.0);
             let (canvas_w, canvas_h) = match (hdr_info.width, hdr_info.height) {
                 (Some(w), Some(h)) => (w, h),
                 _ => {
                     return Err(
-                        "HDR target resolution unavailable for letterbox measurement".to_string()
+                        "HDR target resolution unavailable for letterbox measurement".to_string(),
                     )
                 }
             };
-            let measured =
-                measure_letterbox(rt, logger, hdr_target, &windows, canvas_w, canvas_h)?;
+            let measured = measure_letterbox(rt, logger, hdr_target, &windows, canvas_w, canvas_h)?;
             let dv_presets = dv_rpu_l5_presets(&hybrid_rpu, &hybrid_l5_json, rt, logger)?;
             let canvas_match = dv_info.width == hdr_info.width
                 && dv_info.height == hdr_info.height
@@ -457,7 +461,7 @@ pub(crate) fn process_hybrid(
     )?;
 
     logger.step("12 | Remux final MKV");
-    run_status(
+    let remux_result = run_status(
         logger,
         rt.dry_run,
         true,
@@ -471,7 +475,13 @@ pub(crate) fn process_hybrid(
             OsString::from("--track-order"),
             OsString::from("1:0"),
         ],
-    )?;
+    );
+    if let Err(e) = remux_result {
+        // A failed mkvmerge (disk full, ...) can leave a partial file at the
+        // output path, which a future run would skip as "already exists".
+        let _ = fs::remove_file(&output_path);
+        return Err(e);
+    }
 
     // Rename a bad output to a fresh .FAILED[.n].mkv (kept for inspection)
     // and build the final error. Shared by validation and sync verification
@@ -500,10 +510,7 @@ pub(crate) fn process_hybrid(
             hdr_target.display(),
             kept_path.display()
         ));
-        format!(
-            "{e}\n  Output kept for inspection: {}",
-            kept_path.display()
-        )
+        format!("{e}\n  Output kept for inspection: {}", kept_path.display())
     };
 
     logger.step("13 | Validate output");

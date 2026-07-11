@@ -104,8 +104,12 @@ pub(crate) fn get_hevc_track_id(file: &Path, rt: &Runtime, logger: &Logger) -> A
     let args = vec![OsString::from("-J"), file.as_os_str().to_os_string()];
     let out = run_capture(logger, &rt.mkvmerge, &args)?;
 
-    let v: serde_json::Value = serde_json::from_str(&out)
-        .map_err(|e| format!("Failed to parse mkvmerge -J output for {}: {e}", file.display()))?;
+    let v: serde_json::Value = serde_json::from_str(&out).map_err(|e| {
+        format!(
+            "Failed to parse mkvmerge -J output for {}: {e}",
+            file.display()
+        )
+    })?;
 
     let tracks = v
         .get("tracks")

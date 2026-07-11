@@ -7,7 +7,9 @@ use crate::logger::Logger;
 use crate::mediainfo::{hybrid_detect_dv_profile, hybrid_get_media_info, parse_int};
 use crate::runtime::Runtime;
 
-use super::scenes::{correlate_scene_cuts, export_dv_scene_cuts, parse_scene_list, CorrelationReport};
+use super::scenes::{
+    correlate_scene_cuts, export_dv_scene_cuts, parse_scene_list, CorrelationReport,
+};
 
 pub(crate) fn hybrid_get_rpu_frame_count(
     rpu_file: &Path,

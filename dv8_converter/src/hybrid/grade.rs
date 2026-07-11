@@ -17,7 +17,9 @@ use std::path::Path;
 
 use crate::cli::GradeCheckMode;
 use crate::exec::AppResult;
-use crate::ffmpeg::{cropdetect_window, measure_luma_window, sample_windows, FrameLuma, SampleWindow};
+use crate::ffmpeg::{
+    cropdetect_window, measure_luma_window, sample_windows, FrameLuma, SampleWindow,
+};
 use crate::logger::Logger;
 use crate::mediainfo::HybridMediaInfo;
 use crate::pq::{code_limited_to_pq, pq_to_nits};
@@ -96,7 +98,10 @@ pub(crate) fn static_grade_verdict(
         if rel_diff(f64::from(d), f64::from(h)) > 0.20 {
             let msg = format!("MaxCLL differs by >20%: {d} vs {h} nits");
             return if mode == GradeCheckMode::Metadata && !skip {
-                (Verdict::Fail, format!("{msg} - failing in metadata-only mode"))
+                (
+                    Verdict::Fail,
+                    format!("{msg} - failing in metadata-only mode"),
+                )
             } else {
                 (Verdict::Warn, format!("{msg} - measured check will decide"))
             };
@@ -208,8 +213,11 @@ pub(crate) fn run_grade_check(
     let offset_s = offset_frames as f64 / fps;
 
     // (hdr series, dv series, dv lag search range) per window
-    let mut window_pairs: Vec<(Vec<FrameLuma>, Vec<FrameLuma>, std::ops::RangeInclusive<i64>)> =
-        Vec::new();
+    let mut window_pairs: Vec<(
+        Vec<FrameLuma>,
+        Vec<FrameLuma>,
+        std::ops::RangeInclusive<i64>,
+    )> = Vec::new();
 
     match mode {
         GradeCheckMode::Metadata => {
@@ -228,8 +236,7 @@ pub(crate) fn run_grade_check(
                 };
                 let hdr_crop = cropdetect_window(rt, logger, hdr_target, w, GRADE_CROP_LIMIT)?;
                 let dv_crop = cropdetect_window(rt, logger, dv_source, &dv_w, GRADE_CROP_LIMIT)?;
-                let hdr_series =
-                    measure_luma_window(rt, logger, hdr_target, w, hdr_crop.as_ref())?;
+                let hdr_series = measure_luma_window(rt, logger, hdr_target, w, hdr_crop.as_ref())?;
                 let dv_series =
                     measure_luma_window(rt, logger, dv_source, &dv_w, dv_crop.as_ref())?;
                 window_pairs.push((hdr_series, dv_series, 0..=2 * pad_frames));
@@ -256,10 +263,7 @@ pub(crate) fn run_grade_check(
             let (hdr_series, dv_series): (Vec<_>, Vec<_>) = if offset_frames >= 0 {
                 (
                     hdr_series,
-                    dv_series
-                        .into_iter()
-                        .skip(offset_frames as usize)
-                        .collect(),
+                    dv_series.into_iter().skip(offset_frames as usize).collect(),
                 )
             } else {
                 (
@@ -429,7 +433,9 @@ mod tests {
 
     #[test]
     fn brightness_shift_detected() {
-        let hdr: Vec<f64> = (0..200).map(|i| 0.3 + ((i * 13) % 50) as f64 / 500.0).collect();
+        let hdr: Vec<f64> = (0..200)
+            .map(|i| 0.3 + ((i * 13) % 50) as f64 / 500.0)
+            .collect();
         let dv: Vec<f64> = hdr.iter().map(|v| v + 0.05).collect(); // regraded
         let (_, delta) = best_lag_delta(&dv, &hdr, -5..=5).unwrap();
         assert!(delta > WINDOW_DELTA_PQ_FAIL);
