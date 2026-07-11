@@ -26,7 +26,13 @@ use grade::run_grade_check;
 use letterbox::{decide_active_area, dv_rpu_l5_presets, measure_letterbox, ActiveAreaChoice};
 use preflight::hybrid_preflight_checks;
 use scenes::{correlate_scene_cuts, export_dv_scene_cuts};
-use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output};
+use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output, hybrid_verify_output_sync};
+
+/// Correlation search window in frames: --max-offset, or 5 minutes' worth.
+fn correlation_max_offset(opts: &HybridOptions, fps: f64) -> i64 {
+    opts.max_offset
+        .unwrap_or_else(|| (fps * 300.0).round() as u64) as i64
+}
 
 /// Compute the RPU alignment strategy per the configured sync mode.
 ///
@@ -70,9 +76,7 @@ fn compute_alignment(
     );
     logger.ok(&format!("HDR target scene cuts: {}", hdr_cuts.len()));
 
-    let max_offset = opts
-        .max_offset
-        .unwrap_or_else(|| (fps * 300.0).round() as u64) as i64;
+    let max_offset = correlation_max_offset(opts, fps);
     let report = correlate_scene_cuts(&dv_cuts, &hdr_cuts, max_offset, 1);
 
     match report.accepted {
@@ -181,6 +185,10 @@ pub(crate) fn process_hybrid(
     let dv_scenes_txt = tmp_dir.join(format!("{base}.hybrid.dv_scenes.txt"));
     let hdr_scenes_txt = tmp_dir.join(format!("{base}.hybrid.hdr_scenes.txt"));
     let hybrid_l5_json = tmp_dir.join(format!("{base}.hybrid.l5.json"));
+    let verify_rpu = tmp_dir.join(format!("{base}.hybrid.verify.rpu.bin"));
+    // Like the scene lists, verify_scenes stays out of the CleanupGuard so a
+    // sync-verification failure leaves it behind for inspection.
+    let verify_scenes_txt = tmp_dir.join(format!("{base}.hybrid.verify_scenes.txt"));
 
     let mut cleanup = CleanupGuard::new(logger.clone());
     cleanup.add(&hybrid_rpu);
@@ -189,6 +197,7 @@ pub(crate) fn process_hybrid(
     cleanup.add(&hybrid_injected_hevc);
     cleanup.add(&hybrid_editor_json);
     cleanup.add(&hybrid_l5_json);
+    cleanup.add(&verify_rpu);
 
     logger.step("0 | Determine output path");
     logger.ok(&format!("Hybrid output: {}", output_path.display()));
@@ -456,8 +465,9 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("13 | Validate output");
-    if let Err(e) = hybrid_validate_output(&output_path, hdr_target, rt, logger) {
+    // Rename a bad output to .FAILED.mkv (kept for inspection) and build the
+    // final error. Shared by validation and sync verification below.
+    let fail_output = |e: String| -> String {
         let failed_path = output_path.with_extension("FAILED.mkv");
         let _ = fs::rename(&output_path, &failed_path);
         logger.log(&format!(
@@ -466,13 +476,32 @@ pub(crate) fn process_hybrid(
             hdr_target.display(),
             failed_path.display()
         ));
-        return Err(format!(
+        format!(
             "{e}\n  Output kept for inspection: {}",
             failed_path.display()
-        ));
+        )
+    };
+
+    logger.step("13 | Validate output");
+    if let Err(e) = hybrid_validate_output(&output_path, hdr_target, rt, logger) {
+        return Err(fail_output(e));
     }
 
-    logger.step("14 | Cleanup");
+    logger.step("14 | Post-inject sync verification");
+    if let Err(e) = hybrid_verify_output_sync(
+        &output_path,
+        hdr_info.frame_count,
+        &hdr_scenes_txt,
+        &verify_rpu,
+        &verify_scenes_txt,
+        correlation_max_offset(opts, fps),
+        rt,
+        logger,
+    ) {
+        return Err(fail_output(e));
+    }
+
+    logger.step("15 | Cleanup");
     let _ = fs::remove_file(&hybrid_rpu);
     let _ = fs::remove_file(&hybrid_aligned_rpu);
     let _ = fs::remove_file(&hybrid_hevc);
@@ -481,6 +510,8 @@ pub(crate) fn process_hybrid(
     let _ = fs::remove_file(&dv_scenes_txt);
     let _ = fs::remove_file(&hdr_scenes_txt);
     let _ = fs::remove_file(&hybrid_l5_json);
+    let _ = fs::remove_file(&verify_rpu);
+    let _ = fs::remove_file(&verify_scenes_txt);
     cleanup.clear();
 
     if opts.delete_sources {
