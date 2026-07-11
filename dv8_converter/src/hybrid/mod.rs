@@ -66,14 +66,22 @@ fn compute_alignment(
 
     logger.log("Scanning HDR target for scene cuts (full decode, this can take a while)...");
     let hdr_cuts = detect_scene_cuts(rt, logger, hdr_target, opts.scene_threshold)?;
-    let _ = fs::write(
+    // The post-inject verification re-reads this file; a failed write would
+    // make it compare against stale cuts or silently skip.
+    fs::write(
         hdr_scenes_txt,
         hdr_cuts
             .iter()
             .map(|c| c.to_string())
             .collect::<Vec<_>>()
             .join("\n"),
-    );
+    )
+    .map_err(|e| {
+        format!(
+            "Failed to write HDR scene list {}: {e}",
+            hdr_scenes_txt.display()
+        )
+    })?;
     logger.ok(&format!("HDR target scene cuts: {}", hdr_cuts.len()));
 
     let max_offset = correlation_max_offset(opts, fps);
@@ -465,20 +473,36 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    // Rename a bad output to .FAILED.mkv (kept for inspection) and build the
-    // final error. Shared by validation and sync verification below.
+    // Rename a bad output to a fresh .FAILED[.n].mkv (kept for inspection)
+    // and build the final error. Shared by validation and sync verification
+    // below. If the rename fails, the bad file is still at output_path where
+    // the next run would skip it as "already exists" - report that honestly.
     let fail_output = |e: String| -> String {
-        let failed_path = output_path.with_extension("FAILED.mkv");
-        let _ = fs::rename(&output_path, &failed_path);
+        let mut failed_path = output_path.with_extension("FAILED.mkv");
+        let mut n = 1;
+        while failed_path.exists() {
+            n += 1;
+            failed_path = output_path.with_extension(format!("FAILED.{n}.mkv"));
+        }
+        let kept_path = match fs::rename(&output_path, &failed_path) {
+            Ok(()) => failed_path,
+            Err(rename_err) => {
+                logger.warn(&format!(
+                    "Could not rename failed output to {}: {rename_err}",
+                    failed_path.display()
+                ));
+                output_path.clone()
+            }
+        };
         logger.log(&format!(
             "Hybrid validation failed: {} + {} -> kept at {}",
             dv_source.display(),
             hdr_target.display(),
-            failed_path.display()
+            kept_path.display()
         ));
         format!(
             "{e}\n  Output kept for inspection: {}",
-            failed_path.display()
+            kept_path.display()
         )
     };
 
