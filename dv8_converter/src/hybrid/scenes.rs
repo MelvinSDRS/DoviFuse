@@ -352,7 +352,10 @@ mod tests {
         let report = correlate_scene_cuts(&dv, &hdr, 7200, 1);
         assert!(report.accepted.is_none());
         let why = report.rejection.unwrap();
-        assert!(why.contains("tercile") || why.contains("ambiguous"), "{why}");
+        assert!(
+            why.contains("tercile") || why.contains("ambiguous"),
+            "{why}"
+        );
     }
 
     #[test]

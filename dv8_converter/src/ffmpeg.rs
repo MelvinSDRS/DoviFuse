@@ -52,7 +52,6 @@ pub(crate) fn sample_windows(duration_s: f64, count: usize, window_s: f64) -> Ve
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FrameLuma {
-    pub(crate) frame: u64,
     pub(crate) yavg: f64,
     pub(crate) ymax: f64,
 }
@@ -69,13 +68,12 @@ pub(crate) fn parse_signalstats(output: &str) -> Vec<FrameLuma> {
     let mut yavg: Option<f64> = None;
     let mut ymax: Option<f64> = None;
 
+    // The frame number gates the flush (a stats pair without a preceding
+    // frame: line is malformed) but is not stored - measurements are used
+    // positionally.
     let mut flush = |frame: Option<u64>, yavg: &mut Option<f64>, ymax: &mut Option<f64>| {
-        if let (Some(f), Some(a), Some(m)) = (frame, yavg.take(), ymax.take()) {
-            frames.push(FrameLuma {
-                frame: f,
-                yavg: a,
-                ymax: m,
-            });
+        if let (Some(_), Some(a), Some(m)) = (frame, yavg.take(), ymax.take()) {
+            frames.push(FrameLuma { yavg: a, ymax: m });
         }
     };
 
@@ -320,10 +318,10 @@ lavfi.signalstats.YMAX=910
 ";
         let frames = parse_signalstats(fixture);
         assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].frame, 0);
         assert!((frames[0].yavg - 501.544).abs() < 1e-9);
         assert!((frames[0].ymax - 900.0).abs() < 1e-9);
-        assert_eq!(frames[1].frame, 1);
+        assert!((frames[1].yavg - 502.1).abs() < 1e-9);
+        assert!((frames[1].ymax - 910.0).abs() < 1e-9);
     }
 
     #[test]

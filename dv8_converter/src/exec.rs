@@ -99,7 +99,11 @@ pub(crate) fn run_capture_all(
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
 
     if !out.status.success() && !allow_failure {
-        return Err(format!("Command failed ({}): {}", out.status, stderr.trim()));
+        return Err(format!(
+            "Command failed ({}): {}",
+            out.status,
+            stderr.trim()
+        ));
     }
 
     Ok((stdout, stderr))

@@ -31,6 +31,7 @@ pub(crate) struct Bars {
 }
 
 impl Bars {
+    #[cfg(test)]
     pub(crate) const ZERO: Bars = Bars {
         left: 0,
         right: 0,
@@ -204,7 +205,11 @@ pub(crate) fn decide_active_area(
     };
 
     if canvas_match {
-        if !distinct.is_empty() && distinct.iter().all(|p| p.max_edge_diff(&bars) <= L5_MATCH_PX) {
+        if !distinct.is_empty()
+            && distinct
+                .iter()
+                .all(|p| p.max_edge_diff(&bars) <= L5_MATCH_PX)
+        {
             logs.push((
                 false,
                 format!(
@@ -218,14 +223,12 @@ pub(crate) fn decide_active_area(
         if distinct.len() > 1 {
             // The RPU carries per-scene L5 (variable AR) on the same canvas;
             // that is richer than a single measured preset.
-            let widest = distinct
-                .iter()
-                .fold(distinct[0], |a, b| Bars {
-                    left: a.left.min(b.left),
-                    right: a.right.min(b.right),
-                    top: a.top.min(b.top),
-                    bottom: a.bottom.min(b.bottom),
-                });
+            let widest = distinct.iter().fold(distinct[0], |a, b| Bars {
+                left: a.left.min(b.left),
+                right: a.right.min(b.right),
+                top: a.top.min(b.top),
+                bottom: a.bottom.min(b.bottom),
+            });
             logs.push((
                 false,
                 format!(
@@ -372,7 +375,9 @@ mod tests {
         let (choice, logs) =
             decide_active_area(Some((Bars::ZERO, 280)), &[scope, Bars::ZERO], true);
         assert_eq!(choice, ActiveAreaChoice::Keep);
-        assert!(logs.iter().any(|(warn, m)| *warn && m.contains("variable aspect")));
+        assert!(logs
+            .iter()
+            .any(|(warn, m)| *warn && m.contains("variable aspect")));
     }
 
     #[test]

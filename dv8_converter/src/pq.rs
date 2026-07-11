@@ -16,6 +16,7 @@ pub(crate) fn pq_to_nits(e: f64) -> f64 {
 }
 
 /// ST 2084 inverse EOTF: luminance in nits [0,10000] -> normalized PQ signal [0,1].
+#[cfg(test)]
 pub(crate) fn nits_to_pq(nits: f64) -> f64 {
     let y = (nits / 10000.0).clamp(0.0, 1.0);
     let ym = y.powf(M1);
@@ -32,6 +33,7 @@ pub(crate) fn code_limited_to_pq(code: f64, bit_depth: u32) -> f64 {
 }
 
 /// Limited-range luma code value at the given bit depth -> nits.
+#[cfg(test)]
 pub(crate) fn code_limited_to_nits(code: f64, bit_depth: u32) -> f64 {
     pq_to_nits(code_limited_to_pq(code, bit_depth))
 }

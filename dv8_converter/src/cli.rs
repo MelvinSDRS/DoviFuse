@@ -205,8 +205,8 @@ pub(crate) fn parse_args() -> AppResult<CliArgs> {
                         "full" => GradeCheckMode::Full,
                         other => {
                             return Err(format!(
-                                "Invalid --grade-check mode '{other}' (expected metadata|sampled|full)"
-                            ))
+                            "Invalid --grade-check mode '{other}' (expected metadata|sampled|full)"
+                        ))
                         }
                     };
                     hybrid_only_flags.push(arg.clone());
@@ -222,8 +222,8 @@ pub(crate) fn parse_args() -> AppResult<CliArgs> {
                         "off" => LetterboxMode::Off,
                         other => {
                             return Err(format!(
-                                "Invalid --letterbox mode '{other}' (expected measured|resolution|off)"
-                            ))
+                            "Invalid --letterbox mode '{other}' (expected measured|resolution|off)"
+                        ))
                         }
                     };
                     hybrid_only_flags.push(arg.clone());
