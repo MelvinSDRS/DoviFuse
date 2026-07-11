@@ -141,19 +141,21 @@ pub(crate) fn get_hevc_track_id(file: &Path, rt: &Runtime, logger: &Logger) -> A
     first_video.ok_or_else(|| format!("No video track found in {}", file.display()))
 }
 
-pub(crate) fn hybrid_get_media_info(
-    file: &Path,
-    rt: &Runtime,
-    logger: &Logger,
-) -> AppResult<HybridMediaInfo> {
-    let template = "--Output=Video;%Format%|%CodecID%|%FrameCount%|%FrameRate%|%FrameRate_Num%|%FrameRate_Den%|%Duration%|%HDR_Format%|%Width%|%Height%|%BitDepth%|%colour_primaries%|%transfer_characteristics%|%FrameRate_Mode%|%ScanType%|%MaxCLL%|%MaxFALL%|%MasteringDisplay_Luminance%";
-
-    let args = vec![OsString::from(template), file.as_os_str().to_os_string()];
-    let out = run_capture(logger, &rt.mediainfo, &args)?;
-    let line = out
-        .lines()
-        .find(|l| !l.trim().is_empty())
-        .ok_or_else(|| format!("No mediainfo video output for {}", file.display()))?;
+/// Pick the video-track line the hybrid pipeline actually processes: the
+/// first HEVC track, falling back to the first video track — the same
+/// preference `get_hevc_track_id` uses for extraction, so probe and
+/// extraction can't describe different tracks.
+pub(crate) fn parse_hybrid_media_info(out: &str) -> Option<HybridMediaInfo> {
+    let lines: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
+    let line = lines
+        .iter()
+        .find(|l| {
+            let mut it = l.split('|');
+            let format = it.next().unwrap_or("").trim().to_ascii_lowercase();
+            let codec_id = it.next().unwrap_or("").trim().to_ascii_lowercase();
+            format.contains("hevc") || codec_id.contains("hevc") || codec_id.contains("dvhe")
+        })
+        .or_else(|| lines.first())?;
 
     let parts: Vec<&str> = line.split('|').collect();
     let get = |idx: usize| -> String {
@@ -167,7 +169,7 @@ pub(crate) fn hybrid_get_media_info(
     let (mastering_min_nits, mastering_max_nits) = parse_mastering_luminance(&mastering);
     let _ = get(14);
 
-    Ok(HybridMediaInfo {
+    Some(HybridMediaInfo {
         codec: get(0),
         codec_id: get(1),
         frame_count: parse_int(&get(2)).unwrap_or(0),
@@ -187,6 +189,22 @@ pub(crate) fn hybrid_get_media_info(
         mastering_min_nits,
         mastering_max_nits,
     })
+}
+
+pub(crate) fn hybrid_get_media_info(
+    file: &Path,
+    rt: &Runtime,
+    logger: &Logger,
+) -> AppResult<HybridMediaInfo> {
+    // The trailing \n (expanded by mediainfo) puts each video track on its
+    // own line; without it multiple tracks concatenate into one unparseable
+    // line and every field would describe whichever track comes first.
+    let template = "--Output=Video;%Format%|%CodecID%|%FrameCount%|%FrameRate%|%FrameRate_Num%|%FrameRate_Den%|%Duration%|%HDR_Format%|%Width%|%Height%|%BitDepth%|%colour_primaries%|%transfer_characteristics%|%FrameRate_Mode%|%ScanType%|%MaxCLL%|%MaxFALL%|%MasteringDisplay_Luminance%\\n";
+
+    let args = vec![OsString::from(template), file.as_os_str().to_os_string()];
+    let out = run_capture(logger, &rt.mediainfo, &args)?;
+    parse_hybrid_media_info(&out)
+        .ok_or_else(|| format!("No mediainfo video output for {}", file.display()))
 }
 
 pub(crate) fn hybrid_detect_dv_profile(
@@ -235,5 +253,33 @@ mod tests {
     fn parse_int_strips_units() {
         assert_eq!(parse_int("129 597"), Some(129_597));
         assert_eq!(parse_int(""), None);
+    }
+
+    const HEVC_LINE: &str = "HEVC|V_MPEGH/ISO/HEVC|129597|23.976|24000|1001|5405400.000|SMPTE ST 2086, HDR10 compatible|3840|2160|10|BT.2020|PQ|CFR|Progressive|1016|258|min: 0.0050 cd/m2, max: 1000 cd/m2";
+
+    #[test]
+    fn hybrid_media_info_single_track() {
+        let info = parse_hybrid_media_info(HEVC_LINE).unwrap();
+        assert_eq!(info.codec, "HEVC");
+        assert_eq!(info.frame_count, 129_597);
+        assert_eq!(info.width, Some(3840));
+        assert_eq!(info.max_cll, Some(1016));
+        assert_eq!(info.mastering_max_nits, Some(1000.0));
+        assert!(parse_hybrid_media_info("\n  \n").is_none());
+    }
+
+    #[test]
+    fn hybrid_media_info_prefers_hevc_track() {
+        // A cover-art/bonus track before the movie track must not win: the
+        // extraction side (get_hevc_track_id) picks the HEVC track.
+        let out = format!("V_MJPEG|V_MJPEG|1||||40.000||320|180|8|||VFR||||\n{HEVC_LINE}\n");
+        let info = parse_hybrid_media_info(&out).unwrap();
+        assert_eq!(info.codec, "HEVC");
+        assert_eq!(info.height, Some(2160));
+
+        // No HEVC track at all: fall back to the first video track.
+        let out = "AV1|V_AV1|500|24.000|||||1920|1080|10|BT.2020|PQ|CFR|||||";
+        let info = parse_hybrid_media_info(out).unwrap();
+        assert_eq!(info.codec, "AV1");
     }
 }

@@ -150,21 +150,26 @@ pub(crate) fn hybrid_preflight_checks(
         ),
     }
 
-    if dv_profile == Some(5) {
-        logger.preflight_status(
+    match dv_profile {
+        Some(5) => logger.preflight_status(
             "WARN",
             "9. DV Profile 5 source detected - mode 3 will be used",
-        );
-    } else {
-        logger.preflight_status(
-            "PASS",
-            &format!(
-                "9. DV profile check (detected: {})",
-                dv_profile
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| "unknown".to_string())
-            ),
-        );
+        ),
+        Some(p) => logger.preflight_status("PASS", &format!("9. DV profile check (detected: {p})")),
+        // An undetected profile would silently get mode 2; if the source is
+        // actually P5 that skips the IPT-PQ-c2 conversion and produces a
+        // broken P8-labelled output.
+        None if opts.force => logger.preflight_status(
+            "WARN",
+            "9. DV profile could not be detected - assuming P7/P8 (editor mode 2) due to --force",
+        ),
+        None => {
+            logger.preflight_status(
+                "FAIL",
+                "9. DV profile could not be detected - a P5 source would be converted incorrectly (re-run with --force to assume P7/P8)",
+            );
+            has_fail = true;
+        }
     }
 
     let hdr_meta_lower = hdr_info.hdr_format.to_lowercase();
@@ -217,4 +222,79 @@ pub(crate) fn hybrid_preflight_checks(
     }
 
     has_fail
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn logger() -> Logger {
+        Logger::new(PathBuf::from("/dev/null"), false)
+    }
+
+    /// A DV/HDR pair that passes every check (profile passed separately).
+    fn good_pair() -> (HybridMediaInfo, HybridMediaInfo) {
+        let dv = HybridMediaInfo {
+            codec: "HEVC".to_string(),
+            codec_id: "V_MPEGH/ISO/HEVC".to_string(),
+            frame_count: 100_000,
+            frame_rate: Some(23.976),
+            duration_ms: Some(4_170_000.0),
+            hdr_format: "Dolby Vision".to_string(),
+            width: Some(3840),
+            height: Some(2160),
+            bit_depth: Some(10),
+            colour_primaries: "BT.2020".to_string(),
+            transfer_characteristics: "PQ".to_string(),
+            frame_rate_mode: "Constant".to_string(),
+            max_cll: Some(1000),
+            max_fall: Some(400),
+            mastering_min_nits: Some(0.005),
+            mastering_max_nits: Some(1000.0),
+            ..Default::default()
+        };
+        let hdr = HybridMediaInfo {
+            hdr_format: "SMPTE ST 2086".to_string(),
+            ..dv.clone()
+        };
+        (dv, hdr)
+    }
+
+    #[test]
+    fn good_pair_with_known_profile_passes() {
+        let (dv, hdr) = good_pair();
+        let opts = HybridOptions::default();
+        assert!(!hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()));
+        assert!(!hybrid_preflight_checks(&dv, &hdr, Some(7), &opts, &logger()));
+        // P5 is a WARN (mode 3), not a failure.
+        assert!(!hybrid_preflight_checks(&dv, &hdr, Some(5), &opts, &logger()));
+    }
+
+    #[test]
+    fn unknown_profile_fails_without_force() {
+        // dv_has_dv must not depend on the profile here, hence the explicit
+        // "Dolby Vision" hdr_format in good_pair().
+        let (dv, hdr) = good_pair();
+        let mut opts = HybridOptions::default();
+        assert!(hybrid_preflight_checks(&dv, &hdr, None, &opts, &logger()));
+        opts.force = true;
+        assert!(!hybrid_preflight_checks(&dv, &hdr, None, &opts, &logger()));
+    }
+
+    #[test]
+    fn zero_frame_count_fails() {
+        let (dv, mut hdr) = good_pair();
+        hdr.frame_count = 0;
+        let opts = HybridOptions::default();
+        assert!(hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()));
+    }
+
+    #[test]
+    fn vfr_fails() {
+        let (mut dv, hdr) = good_pair();
+        dv.frame_rate_mode = "Variable".to_string();
+        let opts = HybridOptions::default();
+        assert!(hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()));
+    }
 }

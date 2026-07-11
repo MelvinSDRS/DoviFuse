@@ -18,7 +18,7 @@ use std::path::Path;
 use crate::cli::GradeCheckMode;
 use crate::exec::AppResult;
 use crate::ffmpeg::{
-    cropdetect_window, measure_luma_window, sample_windows, FrameLuma, SampleWindow,
+    cropdetect_window, measure_luma_window, sample_windows, CropRect, FrameLuma, SampleWindow,
 };
 use crate::logger::Logger;
 use crate::mediainfo::HybridMediaInfo;
@@ -56,14 +56,33 @@ pub(crate) fn static_grade_verdict(
     mode: GradeCheckMode,
     skip: bool,
 ) -> (Verdict, String) {
+    // In metadata-only mode this gate is the ONLY grade check; missing
+    // metadata on either side means the grades cannot be verified at all,
+    // which must not pass silently.
+    let metadata_only = mode == GradeCheckMode::Metadata && !skip;
+    let unverified_suffix = if skip {
+        " - grades are UNVERIFIED (--skip-grade-check)"
+    } else if mode == GradeCheckMode::Metadata {
+        ""
+    } else {
+        " - relying on measured grade check"
+    };
+
     let hdr_has_any = hdr.max_cll.is_some()
         || hdr.max_fall.is_some()
         || hdr.mastering_min_nits.is_some()
         || hdr.mastering_max_nits.is_some();
     if !hdr_has_any {
+        if metadata_only {
+            return (
+                Verdict::Fail,
+                "HDR target has no static brightness metadata to compare - metadata-only grade check impossible (use --grade-check sampled, or --skip-grade-check)"
+                    .to_string(),
+            );
+        }
         return (
             Verdict::Warn,
-            "HDR target brightness metadata missing - L6 override will be skipped".to_string(),
+            format!("HDR target brightness metadata missing - L6 override will be skipped{unverified_suffix}"),
         );
     }
 
@@ -72,10 +91,16 @@ pub(crate) fn static_grade_verdict(
         || dv.mastering_min_nits.is_some()
         || dv.mastering_max_nits.is_some();
     if !dv_has_any {
+        if metadata_only {
+            return (
+                Verdict::Fail,
+                "DV source has no static brightness metadata to compare - metadata-only grade check impossible (use --grade-check sampled, or --skip-grade-check)"
+                    .to_string(),
+            );
+        }
         return (
             Verdict::Warn,
-            "DV source has no static brightness metadata (common for WEB-DL) - relying on measured grade check"
-                .to_string(),
+            format!("DV source has no static brightness metadata (common for WEB-DL){unverified_suffix}"),
         );
     }
 
@@ -124,6 +149,21 @@ pub(crate) fn static_grade_verdict(
                 .to_string(),
         )
     }
+}
+
+/// Whether a cropdetect rectangle can plausibly be letterbox bars. On a dark
+/// window (candle scene, fade, starfield) cropdetect collapses to the
+/// bounding box of lit content; measuring YAVG over such a rect on one source
+/// and near-full-frame on the other fabricates a grade mismatch. Real bars
+/// only ever shrink one axis strongly: require each axis >= 50% of the canvas
+/// and the area >= 40% (windowboxed 4:3-in-scope is ~42%).
+pub(crate) fn plausible_crop(crop: &CropRect, canvas_w: u32, canvas_h: u32) -> bool {
+    if crop.x + crop.w > canvas_w || crop.y + crop.h > canvas_h {
+        return false;
+    }
+    let (w, h) = (u64::from(crop.w), u64::from(crop.h));
+    let (cw, ch) = (u64::from(canvas_w), u64::from(canvas_h));
+    w * 2 >= cw && h * 2 >= ch && w * h * 5 >= cw * ch * 2
 }
 
 /// Find the lag (dv index minus hdr index) minimizing mean |delta| between
@@ -219,6 +259,15 @@ pub(crate) fn run_grade_check(
         std::ops::RangeInclusive<i64>,
     )> = Vec::new();
 
+    // Sanity-gate cropdetect rects against the source's canvas; skip the
+    // check when the resolution is unknown.
+    let crop_ok = |crop: &Option<CropRect>, info: &HybridMediaInfo| -> bool {
+        match (crop, info.width, info.height) {
+            (Some(c), Some(w), Some(h)) => plausible_crop(c, w, h),
+            _ => true,
+        }
+    };
+
     match mode {
         GradeCheckMode::Metadata => {
             return Err("run_grade_check called in metadata-only mode".to_string())
@@ -236,6 +285,13 @@ pub(crate) fn run_grade_check(
                 };
                 let hdr_crop = cropdetect_window(rt, logger, hdr_target, w, GRADE_CROP_LIMIT)?;
                 let dv_crop = cropdetect_window(rt, logger, dv_source, &dv_w, GRADE_CROP_LIMIT)?;
+                if !crop_ok(&hdr_crop, hdr_info) || !crop_ok(&dv_crop, dv_info) {
+                    logger.warn(&format!(
+                        "Grade window at {:.0}s: cropdetect returned an implausible rectangle (dark scene?), window skipped",
+                        w.start_s
+                    ));
+                    continue;
+                }
                 let hdr_series = measure_luma_window(rt, logger, hdr_target, w, hdr_crop.as_ref())?;
                 let dv_series =
                     measure_luma_window(rt, logger, dv_source, &dv_w, dv_crop.as_ref())?;
@@ -252,8 +308,15 @@ pub(crate) fn run_grade_check(
                 start_s: duration_s * 0.5,
                 dur_s: 5.0,
             };
-            let hdr_crop = cropdetect_window(rt, logger, hdr_target, &mid, GRADE_CROP_LIMIT)?;
-            let dv_crop = cropdetect_window(rt, logger, dv_source, &mid, GRADE_CROP_LIMIT)?;
+            let mut hdr_crop = cropdetect_window(rt, logger, hdr_target, &mid, GRADE_CROP_LIMIT)?;
+            let mut dv_crop = cropdetect_window(rt, logger, dv_source, &mid, GRADE_CROP_LIMIT)?;
+            if !crop_ok(&hdr_crop, hdr_info) || !crop_ok(&dv_crop, dv_info) {
+                logger.warn(
+                    "Mid-file cropdetect returned an implausible rectangle (dark scene?) - measuring both sources uncropped",
+                );
+                hdr_crop = None;
+                dv_crop = None;
+            }
             logger.log("Measuring full runtime of both sources (two full decodes)...");
             let hdr_series = measure_luma_window(rt, logger, hdr_target, &full, hdr_crop.as_ref())?;
             let dv_series = measure_luma_window(rt, logger, dv_source, &full, dv_crop.as_ref())?;
@@ -414,10 +477,63 @@ mod tests {
     fn static_gate_missing_metadata_warns() {
         let dv = info(None, None, None, None);
         let hdr = info(Some(1000), Some(400), Some(0.005), Some(1000.0));
-        let (v, _) = static_grade_verdict(&dv, &hdr, M::Sampled, false);
+        let (v, msg) = static_grade_verdict(&dv, &hdr, M::Sampled, false);
         assert_eq!(v, Verdict::Warn);
+        assert!(msg.contains("measured grade check"), "{msg}");
         let (v, _) = static_grade_verdict(&hdr, &dv, M::Sampled, false);
         assert_eq!(v, Verdict::Warn);
+    }
+
+    #[test]
+    fn static_gate_missing_metadata_fails_metadata_only_mode() {
+        // Metadata mode has no measured fallback: nothing to compare must
+        // not pass as a WARN claiming a measured check will run.
+        let dv = info(None, None, None, None);
+        let hdr = info(Some(1000), Some(400), Some(0.005), Some(1000.0));
+        let (v, msg) = static_grade_verdict(&dv, &hdr, M::Metadata, false);
+        assert_eq!(v, Verdict::Fail, "{msg}");
+        let (v, _) = static_grade_verdict(&hdr, &dv, M::Metadata, false);
+        assert_eq!(v, Verdict::Fail);
+        // --skip-grade-check demotes to an honest WARN
+        let (v, msg) = static_grade_verdict(&dv, &hdr, M::Metadata, true);
+        assert_eq!(v, Verdict::Warn);
+        assert!(msg.contains("UNVERIFIED"), "{msg}");
+    }
+
+    #[test]
+    fn plausible_crop_accepts_bars_rejects_bounding_boxes() {
+        // Scope letterbox on UHD: fine.
+        let scope = CropRect {
+            w: 3840,
+            h: 1600,
+            x: 0,
+            y: 280,
+        };
+        assert!(plausible_crop(&scope, 3840, 2160));
+        // Windowboxed (bars on all four edges, ~56% area): still plausible.
+        let windowboxed = CropRect {
+            w: 2880,
+            h: 1600,
+            x: 480,
+            y: 280,
+        };
+        assert!(plausible_crop(&windowboxed, 3840, 2160));
+        // Candle-scene bounding box: both axes collapsed.
+        let dark = CropRect {
+            w: 1200,
+            h: 800,
+            x: 1300,
+            y: 700,
+        };
+        assert!(!plausible_crop(&dark, 3840, 2160));
+        // Out of canvas bounds.
+        let oob = CropRect {
+            w: 3840,
+            h: 2160,
+            x: 16,
+            y: 0,
+        };
+        assert!(!plausible_crop(&oob, 3840, 2160));
     }
 
     #[test]
