@@ -27,6 +27,16 @@ pub(crate) enum GradeCheckMode {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LetterboxMode {
+    /// cropdetect the HDR target and set L5 from the measurement (default).
+    Measured,
+    /// Legacy: derive L5 from the resolution difference between sources.
+    Resolution,
+    /// Leave the RPU's L5 metadata untouched.
+    Off,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SyncMode {
     /// Scene-cut correlation between the DV RPU and the HDR target (default).
     Scenes,
@@ -45,6 +55,7 @@ pub(crate) struct HybridOptions {
     pub(crate) grade_check: GradeCheckMode,
     pub(crate) skip_grade_check: bool,
     pub(crate) grade_windows: usize,
+    pub(crate) letterbox: LetterboxMode,
 }
 
 impl Default for HybridOptions {
@@ -58,6 +69,7 @@ impl Default for HybridOptions {
             grade_check: GradeCheckMode::Sampled,
             skip_grade_check: false,
             grade_windows: 6,
+            letterbox: LetterboxMode::Measured,
         }
     }
 }
@@ -93,6 +105,9 @@ Hybrid-only options:\n\
                     will NOT abort the conversion)\n\
   --grade-windows <n>    Sample windows for the sampled grade check\n\
                     (default: 6)\n\
+  --letterbox <mode>     L5 active-area handling: measured (cropdetect the\n\
+                    HDR target, default), resolution (derive from the\n\
+                    resolution difference), off (keep RPU L5 as-is)\n\
 \n\
 Examples:\n\
   DV7toDV8.sh /path/to/movie.mkv\n\
@@ -191,6 +206,23 @@ pub(crate) fn parse_args() -> AppResult<CliArgs> {
                         other => {
                             return Err(format!(
                                 "Invalid --grade-check mode '{other}' (expected metadata|sampled|full)"
+                            ))
+                        }
+                    };
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--letterbox" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --letterbox".to_string());
+                    }
+                    hybrid.letterbox = match args[i].as_str() {
+                        "measured" => LetterboxMode::Measured,
+                        "resolution" => LetterboxMode::Resolution,
+                        "off" => LetterboxMode::Off,
+                        other => {
+                            return Err(format!(
+                                "Invalid --letterbox mode '{other}' (expected measured|resolution|off)"
                             ))
                         }
                     };

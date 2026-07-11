@@ -1,6 +1,7 @@
 pub(crate) mod align;
 pub(crate) mod editor;
 pub(crate) mod grade;
+pub(crate) mod letterbox;
 pub(crate) mod preflight;
 pub(crate) mod scenes;
 pub(crate) mod validate;
@@ -9,7 +10,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 
-use crate::cli::{GradeCheckMode, HybridOptions, SyncMode};
+use crate::cli::{GradeCheckMode, HybridOptions, LetterboxMode, SyncMode};
 use crate::exec::{run_status, AppResult, CleanupGuard};
 use crate::ffmpeg::detect_scene_cuts;
 use crate::fsutil::check_disk_space_hybrid;
@@ -22,6 +23,7 @@ use crate::runtime::Runtime;
 use align::{alignment_from_offset, compute_alignment_framecount, AlignmentStrategy};
 use editor::hybrid_build_editor_json;
 use grade::run_grade_check;
+use letterbox::{decide_active_area, dv_rpu_l5_presets, measure_letterbox, ActiveAreaChoice};
 use preflight::hybrid_preflight_checks;
 use scenes::{correlate_scene_cuts, export_dv_scene_cuts};
 use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output};
@@ -178,6 +180,7 @@ pub(crate) fn process_hybrid(
     let hybrid_editor_json = tmp_dir.join(format!("{base}.hybrid.editor.json"));
     let dv_scenes_txt = tmp_dir.join(format!("{base}.hybrid.dv_scenes.txt"));
     let hdr_scenes_txt = tmp_dir.join(format!("{base}.hybrid.hdr_scenes.txt"));
+    let hybrid_l5_json = tmp_dir.join(format!("{base}.hybrid.l5.json"));
 
     let mut cleanup = CleanupGuard::new(logger.clone());
     cleanup.add(&hybrid_rpu);
@@ -185,6 +188,7 @@ pub(crate) fn process_hybrid(
     cleanup.add(&hybrid_hevc);
     cleanup.add(&hybrid_injected_hevc);
     cleanup.add(&hybrid_editor_json);
+    cleanup.add(&hybrid_l5_json);
 
     logger.step("0 | Determine output path");
     logger.ok(&format!("Hybrid output: {}", output_path.display()));
@@ -320,12 +324,57 @@ pub(crate) fn process_hybrid(
         logger.ok("Grade check passed: brightness profiles match");
     }
 
-    logger.step("8 | Apply editor (mode conversion + alignment)");
+    logger.step("8 | Letterbox L5 (active area)");
+    let active_area = match opts.letterbox {
+        LetterboxMode::Off => {
+            logger.ok("Letterbox handling disabled (--letterbox off) - RPU L5 kept as-is");
+            ActiveAreaChoice::Keep
+        }
+        LetterboxMode::Resolution => {
+            logger.ok("Resolution-based L5 (--letterbox resolution)");
+            ActiveAreaChoice::Resolution
+        }
+        LetterboxMode::Measured => {
+            rt.require_ffmpeg()?;
+            let duration_s = hdr_info
+                .duration_ms
+                .map(|ms| ms / 1000.0)
+                .unwrap_or_else(|| hdr_info.frame_count as f64 / fps.max(1.0));
+            let windows =
+                crate::ffmpeg::sample_windows(duration_s, opts.grade_windows, 5.0);
+            let (canvas_w, canvas_h) = match (hdr_info.width, hdr_info.height) {
+                (Some(w), Some(h)) => (w, h),
+                _ => {
+                    return Err(
+                        "HDR target resolution unavailable for letterbox measurement".to_string()
+                    )
+                }
+            };
+            let measured =
+                measure_letterbox(rt, logger, hdr_target, &windows, canvas_w, canvas_h)?;
+            let dv_presets = dv_rpu_l5_presets(&hybrid_rpu, &hybrid_l5_json, rt, logger)?;
+            let canvas_match = dv_info.width == hdr_info.width
+                && dv_info.height == hdr_info.height
+                && dv_info.width.is_some();
+            let (choice, logs) = decide_active_area(measured, &dv_presets, canvas_match);
+            for (warn, msg) in &logs {
+                if *warn {
+                    logger.warn(msg);
+                } else {
+                    logger.ok(msg);
+                }
+            }
+            choice
+        }
+    };
+
+    logger.step("9 | Apply editor (mode conversion + alignment)");
     hybrid_build_editor_json(
         &strategy,
         dv_profile,
         &dv_info,
         &hdr_info,
+        &active_area,
         &hybrid_editor_json,
     )?;
 
@@ -359,7 +408,7 @@ pub(crate) fn process_hybrid(
         ));
     }
 
-    logger.step("9 | Extract HEVC from HDR target");
+    logger.step("10 | Extract HEVC from HDR target");
     let track_id = get_hevc_track_id(hdr_target, rt, logger)?;
     run_status(
         logger,
@@ -373,7 +422,7 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("10 | Inject RPU into HEVC");
+    logger.step("11 | Inject RPU into HEVC");
     run_status(
         logger,
         rt.dry_run,
@@ -390,7 +439,7 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("11 | Remux final MKV");
+    logger.step("12 | Remux final MKV");
     run_status(
         logger,
         rt.dry_run,
@@ -407,7 +456,7 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("12 | Validate output");
+    logger.step("13 | Validate output");
     if let Err(e) = hybrid_validate_output(&output_path, hdr_target, rt, logger) {
         let failed_path = output_path.with_extension("FAILED.mkv");
         let _ = fs::rename(&output_path, &failed_path);
@@ -423,7 +472,7 @@ pub(crate) fn process_hybrid(
         ));
     }
 
-    logger.step("13 | Cleanup");
+    logger.step("14 | Cleanup");
     let _ = fs::remove_file(&hybrid_rpu);
     let _ = fs::remove_file(&hybrid_aligned_rpu);
     let _ = fs::remove_file(&hybrid_hevc);
@@ -431,6 +480,7 @@ pub(crate) fn process_hybrid(
     let _ = fs::remove_file(&hybrid_editor_json);
     let _ = fs::remove_file(&dv_scenes_txt);
     let _ = fs::remove_file(&hdr_scenes_txt);
+    let _ = fs::remove_file(&hybrid_l5_json);
     cleanup.clear();
 
     if opts.delete_sources {
