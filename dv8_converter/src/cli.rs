@@ -17,6 +17,16 @@ pub(crate) struct CliArgs {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GradeCheckMode {
+    /// Static metadata comparison only (no pixel measurement).
+    Metadata,
+    /// Measure brightness over sampled windows (default).
+    Sampled,
+    /// Measure brightness over the entire runtime.
+    Full,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SyncMode {
     /// Scene-cut correlation between the DV RPU and the HDR target (default).
     Scenes,
@@ -32,6 +42,9 @@ pub(crate) struct HybridOptions {
     pub(crate) force: bool,
     pub(crate) scene_threshold: f64,
     pub(crate) max_offset: Option<u64>,
+    pub(crate) grade_check: GradeCheckMode,
+    pub(crate) skip_grade_check: bool,
+    pub(crate) grade_windows: usize,
 }
 
 impl Default for HybridOptions {
@@ -42,6 +55,9 @@ impl Default for HybridOptions {
             force: false,
             scene_threshold: 8.0,
             max_offset: None,
+            grade_check: GradeCheckMode::Sampled,
+            skip_grade_check: false,
+            grade_windows: 6,
         }
     }
 }
@@ -70,6 +86,13 @@ Hybrid-only options:\n\
   --scene-threshold <f>  scdet scene-change threshold (default: 8.0)\n\
   --max-offset <n>  Max frame offset searched during correlation\n\
                     (default: 5 minutes worth of frames)\n\
+  --grade-check <mode>   Brightness grade comparison: metadata (static\n\
+                    only), sampled (measure windows, default), full\n\
+                    (measure the entire runtime)\n\
+  --skip-grade-check     Skip the grade gate entirely (mismatched grades\n\
+                    will NOT abort the conversion)\n\
+  --grade-windows <n>    Sample windows for the sampled grade check\n\
+                    (default: 6)\n\
 \n\
 Examples:\n\
   DV7toDV8.sh /path/to/movie.mkv\n\
@@ -154,6 +177,41 @@ pub(crate) fn parse_args() -> AppResult<CliArgs> {
                     hybrid.max_offset = Some(args[i].parse::<u64>().map_err(|_| {
                         format!("Invalid --max-offset '{}' (expected frames)", args[i])
                     })?);
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--grade-check" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --grade-check".to_string());
+                    }
+                    hybrid.grade_check = match args[i].as_str() {
+                        "metadata" => GradeCheckMode::Metadata,
+                        "sampled" => GradeCheckMode::Sampled,
+                        "full" => GradeCheckMode::Full,
+                        other => {
+                            return Err(format!(
+                                "Invalid --grade-check mode '{other}' (expected metadata|sampled|full)"
+                            ))
+                        }
+                    };
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--skip-grade-check" => {
+                    hybrid.skip_grade_check = true;
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--grade-windows" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --grade-windows".to_string());
+                    }
+                    hybrid.grade_windows = args[i]
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|v| (1..=32).contains(v))
+                        .ok_or_else(|| {
+                            format!("Invalid --grade-windows '{}' (expected 1-32)", args[i])
+                        })?;
                     hybrid_only_flags.push(arg.clone());
                 }
                 "-o" => {

@@ -14,6 +14,9 @@ pub(crate) struct AlignmentStrategy {
     pub(crate) remove_ranges: Vec<String>,
     pub(crate) duplicates: Vec<DuplicateOp>,
     pub(crate) high_risk: bool,
+    /// Start-of-file offset (dv_frame = hdr_frame + start_offset), used to
+    /// shift measurement windows in the grade check.
+    pub(crate) start_offset: i64,
 }
 
 /// Exact alignment from a scene-cut-verified offset: dv_frame = hdr_frame + offset.
@@ -43,6 +46,7 @@ pub(crate) fn alignment_from_offset(
 
     let mut s = AlignmentStrategy {
         action: "scene_sync".to_string(),
+        start_offset: offset,
         ..Default::default()
     };
     let mut parts: Vec<String> = Vec::new();
@@ -154,6 +158,7 @@ pub(crate) fn compute_alignment_framecount(
             strategy.description =
                 format!("Medium diff ({abs_diff} frames): trim DV RPU from start (0-{end})");
             strategy.remove_ranges.push(format!("0-{end}"));
+            strategy.start_offset = abs_diff as i64;
         } else {
             strategy.action = "duplicate_start".to_string();
             strategy.description =
@@ -163,6 +168,7 @@ pub(crate) fn compute_alignment_framecount(
                 offset: 0,
                 length: abs_diff,
             });
+            strategy.start_offset = -(abs_diff as i64);
         }
         return strategy;
     }
@@ -176,6 +182,7 @@ pub(crate) fn compute_alignment_framecount(
                 "Large diff ({abs_diff} frames): HIGH RISK, trim DV RPU from start (0-{end})"
             );
             strategy.remove_ranges.push(format!("0-{end}"));
+            strategy.start_offset = abs_diff as i64;
         } else {
             strategy.action = "duplicate_start".to_string();
             strategy.description = format!(
@@ -186,6 +193,7 @@ pub(crate) fn compute_alignment_framecount(
                 offset: 0,
                 length: abs_diff,
             });
+            strategy.start_offset = -(abs_diff as i64);
         }
         return strategy;
     }

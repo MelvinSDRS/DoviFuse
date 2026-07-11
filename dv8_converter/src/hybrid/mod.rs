@@ -1,5 +1,6 @@
 pub(crate) mod align;
 pub(crate) mod editor;
+pub(crate) mod grade;
 pub(crate) mod preflight;
 pub(crate) mod scenes;
 pub(crate) mod validate;
@@ -8,7 +9,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 
-use crate::cli::{HybridOptions, SyncMode};
+use crate::cli::{GradeCheckMode, HybridOptions, SyncMode};
 use crate::exec::{run_status, AppResult, CleanupGuard};
 use crate::ffmpeg::detect_scene_cuts;
 use crate::fsutil::check_disk_space_hybrid;
@@ -20,6 +21,7 @@ use crate::runtime::Runtime;
 
 use align::{alignment_from_offset, compute_alignment_framecount, AlignmentStrategy};
 use editor::hybrid_build_editor_json;
+use grade::run_grade_check;
 use preflight::hybrid_preflight_checks;
 use scenes::{correlate_scene_cuts, export_dv_scene_cuts};
 use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output};
@@ -201,7 +203,7 @@ pub(crate) fn process_hybrid(
     ));
 
     logger.step("3 | Preflight checks");
-    let has_fail = hybrid_preflight_checks(&dv_info, &hdr_info, dv_profile, logger);
+    let has_fail = hybrid_preflight_checks(&dv_info, &hdr_info, dv_profile, opts, logger);
     if has_fail {
         return Err("Hybrid preflight failed".to_string());
     }
@@ -212,7 +214,8 @@ pub(crate) fn process_hybrid(
         .ok_or_else(|| format!("Invalid output path: {}", output_path.display()))?;
     check_disk_space_hybrid(hdr_target, out_dir, logger)?;
 
-    if opts.sync == SyncMode::Scenes {
+    let grade_measures = !opts.skip_grade_check && opts.grade_check != GradeCheckMode::Metadata;
+    if opts.sync == SyncMode::Scenes || grade_measures {
         rt.require_ffmpeg()?;
     }
 
@@ -281,7 +284,43 @@ pub(crate) fn process_hybrid(
         logger.warn("Alignment marked HIGH RISK due to large frame difference");
     }
 
-    logger.step("7 | Apply editor (mode conversion + alignment)");
+    logger.step("7 | Grade check (brightness comparison)");
+    if opts.skip_grade_check {
+        logger.warn("Grade check skipped (--skip-grade-check)");
+    } else if opts.grade_check == GradeCheckMode::Metadata {
+        logger.ok("Metadata-only grade check: static gate already enforced in preflight");
+    } else {
+        let outcome = run_grade_check(
+            rt,
+            logger,
+            dv_source,
+            hdr_target,
+            &dv_info,
+            &hdr_info,
+            strategy.start_offset,
+            fps,
+            opts.grade_check,
+            opts.grade_windows,
+        )?;
+        logger.log(&format!(
+            "Grade summary: {} windows measured, {} mismatched, worst mean |dPQ| {:.4}, p99 peak {:.0} nits (DV) vs {:.0} nits (HDR), ratio {:.2}",
+            outcome.windows_measured,
+            outcome.windows_bad,
+            outcome.worst_delta_pq,
+            outcome.p99_dv_nits,
+            outcome.p99_hdr_nits,
+            outcome.peak_ratio
+        ));
+        if !outcome.pass {
+            return Err(format!(
+                "Grade check FAILED: the two sources appear to use different HDR grades ({} of {} windows mismatched, peak ratio {:.2}). A hybrid from these would tone-map incorrectly. Use --skip-grade-check only if you are certain the grades match.",
+                outcome.windows_bad, outcome.windows_measured, outcome.peak_ratio
+            ));
+        }
+        logger.ok("Grade check passed: brightness profiles match");
+    }
+
+    logger.step("8 | Apply editor (mode conversion + alignment)");
     hybrid_build_editor_json(
         &strategy,
         dv_profile,
@@ -320,7 +359,7 @@ pub(crate) fn process_hybrid(
         ));
     }
 
-    logger.step("8 | Extract HEVC from HDR target");
+    logger.step("9 | Extract HEVC from HDR target");
     let track_id = get_hevc_track_id(hdr_target, rt, logger)?;
     run_status(
         logger,
@@ -334,7 +373,7 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("9 | Inject RPU into HEVC");
+    logger.step("10 | Inject RPU into HEVC");
     run_status(
         logger,
         rt.dry_run,
@@ -351,7 +390,7 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("10 | Remux final MKV");
+    logger.step("11 | Remux final MKV");
     run_status(
         logger,
         rt.dry_run,
@@ -368,7 +407,7 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
-    logger.step("11 | Validate output");
+    logger.step("12 | Validate output");
     if let Err(e) = hybrid_validate_output(&output_path, hdr_target, rt, logger) {
         let failed_path = output_path.with_extension("FAILED.mkv");
         let _ = fs::rename(&output_path, &failed_path);
@@ -384,7 +423,7 @@ pub(crate) fn process_hybrid(
         ));
     }
 
-    logger.step("12 | Cleanup");
+    logger.step("13 | Cleanup");
     let _ = fs::remove_file(&hybrid_rpu);
     let _ = fs::remove_file(&hybrid_aligned_rpu);
     let _ = fs::remove_file(&hybrid_hevc);
