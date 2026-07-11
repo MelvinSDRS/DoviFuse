@@ -16,16 +16,32 @@ pub(crate) struct CliArgs {
     pub(crate) original_args: Vec<String>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SyncMode {
+    /// Scene-cut correlation between the DV RPU and the HDR target (default).
+    Scenes,
+    /// Legacy frame-count-difference heuristic.
+    Framecount,
+}
+
 /// Options that only apply to --hybrid runs.
 #[derive(Clone)]
 pub(crate) struct HybridOptions {
     pub(crate) delete_sources: bool,
+    pub(crate) sync: SyncMode,
+    pub(crate) force: bool,
+    pub(crate) scene_threshold: f64,
+    pub(crate) max_offset: Option<u64>,
 }
 
 impl Default for HybridOptions {
     fn default() -> Self {
         Self {
             delete_sources: false,
+            sync: SyncMode::Scenes,
+            force: false,
+            scene_threshold: 8.0,
+            max_offset: None,
         }
     }
 }
@@ -47,6 +63,13 @@ Options:\n\
 Hybrid-only options:\n\
   --delete-sources  Delete both input files after successful validation\n\
                     (default: keep both originals)\n\
+  --sync <mode>     Alignment mode: scenes (scene-cut correlation, default)\n\
+                    or framecount (legacy frame-count heuristic)\n\
+  --force           Fall back to the framecount heuristic when scene-cut\n\
+                    correlation fails instead of aborting\n\
+  --scene-threshold <f>  scdet scene-change threshold (default: 8.0)\n\
+  --max-offset <n>  Max frame offset searched during correlation\n\
+                    (default: 5 minutes worth of frames)\n\
 \n\
 Examples:\n\
   DV7toDV8.sh /path/to/movie.mkv\n\
@@ -87,6 +110,50 @@ pub(crate) fn parse_args() -> AppResult<CliArgs> {
                 "--hybrid" => hybrid_mode = true,
                 "--delete-sources" => {
                     hybrid.delete_sources = true;
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--force" => {
+                    hybrid.force = true;
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--sync" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --sync".to_string());
+                    }
+                    hybrid.sync = match args[i].as_str() {
+                        "scenes" => SyncMode::Scenes,
+                        "framecount" => SyncMode::Framecount,
+                        other => {
+                            return Err(format!(
+                                "Invalid --sync mode '{other}' (expected scenes|framecount)"
+                            ))
+                        }
+                    };
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--scene-threshold" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --scene-threshold".to_string());
+                    }
+                    hybrid.scene_threshold = args[i]
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| *v > 0.0 && *v <= 100.0)
+                        .ok_or_else(|| {
+                            format!("Invalid --scene-threshold '{}' (expected 0-100)", args[i])
+                        })?;
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--max-offset" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --max-offset".to_string());
+                    }
+                    hybrid.max_offset = Some(args[i].parse::<u64>().map_err(|_| {
+                        format!("Invalid --max-offset '{}' (expected frames)", args[i])
+                    })?);
                     hybrid_only_flags.push(arg.clone());
                 }
                 "-o" => {

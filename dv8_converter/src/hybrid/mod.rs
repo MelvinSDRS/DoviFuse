@@ -1,14 +1,16 @@
 pub(crate) mod align;
 pub(crate) mod editor;
 pub(crate) mod preflight;
+pub(crate) mod scenes;
 pub(crate) mod validate;
 
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 
-use crate::cli::HybridOptions;
+use crate::cli::{HybridOptions, SyncMode};
 use crate::exec::{run_status, AppResult, CleanupGuard};
+use crate::ffmpeg::detect_scene_cuts;
 use crate::fsutil::check_disk_space_hybrid;
 use crate::logger::Logger;
 use crate::mediainfo::{
@@ -16,10 +18,101 @@ use crate::mediainfo::{
 };
 use crate::runtime::Runtime;
 
-use align::compute_alignment_framecount;
+use align::{alignment_from_offset, compute_alignment_framecount, AlignmentStrategy};
 use editor::hybrid_build_editor_json;
 use preflight::hybrid_preflight_checks;
+use scenes::{correlate_scene_cuts, export_dv_scene_cuts};
 use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output};
+
+/// Compute the RPU alignment strategy per the configured sync mode.
+///
+/// Scenes mode: correlate the RPU's scene-cut list against an ffmpeg scdet
+/// scan of the HDR target. Rejection aborts unless --force, which falls back
+/// to the frame-count heuristic. Both cut lists are persisted next to the
+/// target while processing (kept on failure for inspection).
+#[allow(clippy::too_many_arguments)]
+fn compute_alignment(
+    opts: &HybridOptions,
+    dv_rpu_frames: u64,
+    hybrid_rpu: &Path,
+    hdr_target: &Path,
+    hdr_frames: u64,
+    fps: f64,
+    dv_scenes_txt: &Path,
+    hdr_scenes_txt: &Path,
+    rt: &Runtime,
+    logger: &Logger,
+) -> AppResult<AlignmentStrategy> {
+    if opts.sync == SyncMode::Framecount {
+        return Ok(compute_alignment_framecount(
+            dv_rpu_frames,
+            hdr_frames,
+            fps,
+        ));
+    }
+
+    let dv_cuts = export_dv_scene_cuts(hybrid_rpu, dv_scenes_txt, rt, logger)?;
+    logger.ok(&format!("DV RPU scene cuts: {}", dv_cuts.len()));
+
+    logger.log("Scanning HDR target for scene cuts (full decode, this can take a while)...");
+    let hdr_cuts = detect_scene_cuts(rt, logger, hdr_target, opts.scene_threshold)?;
+    let _ = fs::write(
+        hdr_scenes_txt,
+        hdr_cuts
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    logger.ok(&format!("HDR target scene cuts: {}", hdr_cuts.len()));
+
+    let max_offset = opts
+        .max_offset
+        .unwrap_or_else(|| (fps * 300.0).round() as u64) as i64;
+    let report = correlate_scene_cuts(&dv_cuts, &hdr_cuts, max_offset, 1);
+
+    match report.accepted {
+        Some(sync) => {
+            logger.ok(&format!(
+                "Scene-cut sync: offset {:+} frames ({} matches, {:.0}% of DV cuts, dominance {:.1})",
+                sync.offset,
+                sync.matches,
+                sync.match_ratio * 100.0,
+                sync.dominance
+            ));
+            alignment_from_offset(sync.offset, dv_rpu_frames, hdr_frames)
+        }
+        None => {
+            let reason = report
+                .rejection
+                .unwrap_or_else(|| "unknown".to_string());
+            logger.warn(&format!("Scene-cut correlation rejected: {reason}"));
+            logger.warn(&format!(
+                "  DV cuts: {}, HDR cuts: {}, top offsets: {:?}",
+                report.dv_count, report.hdr_count, report.top_offsets
+            ));
+            logger.warn(&format!(
+                "  Scene lists kept for inspection: {} / {}",
+                dv_scenes_txt.display(),
+                hdr_scenes_txt.display()
+            ));
+            if opts.force {
+                logger.warn(
+                    "--force: falling back to the frame-count heuristic (sync NOT verified)",
+                );
+                Ok(compute_alignment_framecount(
+                    dv_rpu_frames,
+                    hdr_frames,
+                    fps,
+                ))
+            } else {
+                Err(format!(
+                    "Scene-cut sync failed: {reason}. Re-run with --force to use the frame-count heuristic, or --sync framecount."
+                ))
+            }
+        }
+    }
+}
 
 pub(crate) fn process_hybrid(
     dv_source: &Path,
@@ -81,6 +174,8 @@ pub(crate) fn process_hybrid(
     let hybrid_hevc = tmp_dir.join(format!("{base}.hybrid.hevc"));
     let hybrid_injected_hevc = tmp_dir.join(format!("{base}.hybrid.injected.hevc"));
     let hybrid_editor_json = tmp_dir.join(format!("{base}.hybrid.editor.json"));
+    let dv_scenes_txt = tmp_dir.join(format!("{base}.hybrid.dv_scenes.txt"));
+    let hdr_scenes_txt = tmp_dir.join(format!("{base}.hybrid.hdr_scenes.txt"));
 
     let mut cleanup = CleanupGuard::new(logger.clone());
     cleanup.add(&hybrid_rpu);
@@ -116,6 +211,10 @@ pub(crate) fn process_hybrid(
         .parent()
         .ok_or_else(|| format!("Invalid output path: {}", output_path.display()))?;
     check_disk_space_hybrid(hdr_target, out_dir, logger)?;
+
+    if opts.sync == SyncMode::Scenes {
+        rt.require_ffmpeg()?;
+    }
 
     if rt.dry_run {
         logger.ok("[DRY RUN] Preflight completed. Mutating steps were skipped.");
@@ -163,7 +262,19 @@ pub(crate) fn process_hybrid(
         .or_else(|| fps_from_info(&dv_info))
         .unwrap_or(23.976);
 
-    let strategy = compute_alignment_framecount(dv_rpu_frames, hdr_info.frame_count, fps);
+    let strategy = compute_alignment(
+        opts,
+        dv_rpu_frames,
+        &hybrid_rpu,
+        hdr_target,
+        hdr_info.frame_count,
+        fps,
+        &dv_scenes_txt,
+        &hdr_scenes_txt,
+        rt,
+        logger,
+    )?;
+    let exact_alignment = strategy.action == "scene_sync";
 
     logger.ok(&format!("Alignment strategy: {}", strategy.description));
     if strategy.high_risk {
@@ -197,6 +308,12 @@ pub(crate) fn process_hybrid(
 
     let aligned_frames = hybrid_get_rpu_frame_count(&hybrid_aligned_rpu, rt, logger)?;
     if aligned_frames != hdr_info.frame_count {
+        if exact_alignment {
+            return Err(format!(
+                "Aligned RPU frames ({aligned_frames}) do not match HDR target frames ({}) despite scene-sync alignment",
+                hdr_info.frame_count
+            ));
+        }
         logger.warn(&format!(
             "Aligned RPU frames ({aligned_frames}) do not match HDR target frames ({}) - inject-rpu will auto-handle residual mismatch",
             hdr_info.frame_count
@@ -273,6 +390,8 @@ pub(crate) fn process_hybrid(
     let _ = fs::remove_file(&hybrid_hevc);
     let _ = fs::remove_file(&hybrid_injected_hevc);
     let _ = fs::remove_file(&hybrid_editor_json);
+    let _ = fs::remove_file(&dv_scenes_txt);
+    let _ = fs::remove_file(&hdr_scenes_txt);
     cleanup.clear();
 
     if opts.delete_sources {

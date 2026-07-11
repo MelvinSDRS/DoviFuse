@@ -16,10 +16,19 @@ use exec::AppResult;
 use logger::{NC, RED};
 use runtime::build_runtime;
 
-/// Resolve to an absolute path so `.parent()` never yields "" for inputs
-/// given as bare filenames (df/mkvextract choke on empty dirs).
+/// Resolve to an absolute path so `.parent()` never yields "" for paths
+/// given as bare filenames (df/mkvextract choke on empty dirs). Falls back
+/// to cwd-joining for paths that don't exist yet (e.g. -o outputs).
 fn absolutize(p: &PathBuf) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return c;
+    }
+    if p.is_relative() {
+        if let Ok(cwd) = std::env::current_dir() {
+            return cwd.join(p);
+        }
+    }
+    p.clone()
 }
 
 fn run(cli: CliArgs) -> AppResult<()> {
@@ -51,10 +60,11 @@ fn run(cli: CliArgs) -> AppResult<()> {
             .map(absolutize)
             .ok_or_else(|| "Missing HDR target path".to_string())?;
 
+        let custom_output = cli.custom_output.as_ref().map(absolutize);
         hybrid::process_hybrid(
             &dv_source,
             &hdr_target,
-            cli.custom_output.as_deref(),
+            custom_output.as_deref(),
             &cli.hybrid,
             &rt,
             &logger,

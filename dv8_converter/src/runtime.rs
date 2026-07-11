@@ -57,13 +57,17 @@ pub(crate) fn which(name: &str) -> Option<PathBuf> {
 }
 
 pub(crate) fn resolve_executable_tool(candidates: &[PathBuf]) -> Option<PathBuf> {
+    resolve_executable_tool_with(candidates, "--version")
+}
+
+fn resolve_executable_tool_with(candidates: &[PathBuf], version_flag: &str) -> Option<PathBuf> {
     for c in candidates {
         if !is_executable(c) {
             continue;
         }
 
         if let Ok(status) = Command::new(c)
-            .arg("--version")
+            .arg(version_flag)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
@@ -110,6 +114,7 @@ fn resolve_required(script_dir: &Path, name: &str) -> AppResult<PathBuf> {
     resolve_executable_tool(&candidates).ok_or_else(|| format!("Missing tool: {name}"))
 }
 
+/// ffmpeg/ffprobe reject `--version` (exit 8); they use single-dash `-version`.
 fn resolve_optional(script_dir: &Path, name: &str) -> Option<PathBuf> {
     let candidates: Vec<PathBuf> = [
         which(name).unwrap_or_default(),
@@ -119,7 +124,7 @@ fn resolve_optional(script_dir: &Path, name: &str) -> Option<PathBuf> {
     .filter(|p| !p.as_os_str().is_empty())
     .collect();
 
-    resolve_executable_tool(&candidates)
+    resolve_executable_tool_with(&candidates, "-version")
 }
 
 impl Runtime {
