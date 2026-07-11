@@ -1,8 +1,10 @@
 mod cli;
+mod ffmpeg;
 mod exec;
 mod fsutil;
 mod hybrid;
 mod logger;
+mod pq;
 mod mediainfo;
 mod runtime;
 mod standard;
