@@ -1,6 +1,6 @@
 # DV7 to DV8 Conversion Toolkit
 
-This project converts Dolby Vision Profile 7 MKV files to Profile 8 and includes an automation wrapper for qBittorrent workflows.
+This project converts Dolby Vision Profile 7 MKV files to Profile 8, builds **DV Profile 8 hybrids** (inject DV metadata from a WEB-DL into an HDR10 remux), and includes an automation wrapper for qBittorrent workflows.
 
 ## Overview
 
@@ -33,6 +33,7 @@ This project converts Dolby Vision Profile 7 MKV files to Profile 8 and includes
 - `mkvextract` and `mkvmerge` (MKVToolNix).
 - `mediainfo`.
 - `dovi_tool` (found via system `PATH`, `tools/dovi_tool`, or `dovi_tool/target/release/dovi_tool`).
+- `ffmpeg` and `ffprobe` (hybrid mode only: scene-cut sync, grade check, letterbox measurement; found via `PATH` or `tools/`).
 - For `qbt_autorun_wrapper.sh`: `curl`, `jq`, `find`, `sha1sum`.
 
 ## Public Repo Setup
@@ -69,20 +70,55 @@ Flags:
 - `--dry-run`: preview mutating operations.
 - `-h`, `--help`: show usage.
 
-### Hybrid mode
+### Hybrid mode (P8 hybrid maker)
 
-Inject Dolby Vision metadata from a DV source into an HDR target:
+Inject Dolby Vision metadata from a DV source (P5/P8 WEB-DL) into an
+HDR10-only target (typically a Blu-ray remux), producing a DV Profile 8
+hybrid. This automates The HDR Dissector's P8 hybrid workflow headlessly:
 
 ```bash
-# Dry run
+# Dry run (preflight only)
 ./DV7toDV8.sh --hybrid --dry-run /path/to/dv_source.mkv /path/to/hdr_target.mkv
 
-# Convert with default output naming
+# Convert with default output naming (<target>.DV8.Hybrid.mkv)
 ./DV7toDV8.sh --hybrid /path/to/dv_source.mkv /path/to/hdr_target.mkv
 
 # Convert with explicit output path
 ./DV7toDV8.sh --hybrid -o /path/to/output.mkv /path/to/dv_source.mkv /path/to/hdr_target.mkv
 ```
+
+The hybrid pipeline: preflight checks (codec, fps, resolution, static HDR
+metadata gate) → extract RPU → **scene-cut sync** (correlates the RPU's
+scene cuts against an ffmpeg scan of the target to find and fix the exact
+frame offset) → **grade check** (samples brightness windows from both
+sources and aborts when the HDR grades differ, e.g. a 4000-nit DV master
+vs a 1000-nit Blu-ray trim) → **measured letterbox L5** (cropdetect sets
+the active-area metadata) → dovi_tool editor (P5→mode 3, P7/P8→mode 2) →
+inject RPU → remux → validation → **post-inject sync verification**
+(re-extracts the RPU from the output and requires scene cuts to line up
+at offset 0 across the whole runtime).
+
+Hybrid-only flags:
+
+- `--sync <scenes|framecount>`: alignment mode (default `scenes`).
+  Single-shot content with no detectable cuts needs `framecount`.
+- `--force`: fall back to the framecount heuristic when scene correlation
+  fails instead of aborting (output is then verified post-inject).
+- `--max-offset <frames>`: correlation search window (default 5 minutes).
+- `--scene-threshold <f>`: ffmpeg scdet threshold (default 8.0).
+- `--grade-check <metadata|sampled|full>`: grade gate depth (default
+  `sampled`; `full` measures the entire runtime).
+- `--grade-windows <n>`: sample windows for the sampled check (default 6).
+- `--skip-grade-check`: bypass the grade gate (use only when you are
+  certain the grades match).
+- `--letterbox <measured|resolution|off>`: L5 active-area handling
+  (default `measured`).
+- `--delete-sources`: delete both inputs after successful validation
+  (default: keep both).
+
+On validation or sync-verification failure the output is renamed to
+`.FAILED.mkv` and kept for inspection, along with the scene-cut lists
+(`*.hybrid.dv_scenes.txt`, `*.hybrid.hdr_scenes.txt`).
 
 ## qBittorrent Wrapper
 
@@ -130,7 +166,8 @@ Behavior summary:
 ## Safety Notes
 
 - Standard mode deletes the original input only after successful output validation.
-- Hybrid mode deletes both source files only after validation succeeds.
+- Hybrid mode keeps both source files by default; `--delete-sources` removes them after validation AND post-inject sync verification succeed.
+- Failed hybrid outputs are renamed to `.FAILED.mkv` and kept for inspection.
 - `--dry-run` skips mutating commands and is recommended before batch runs.
 
 ## Development
