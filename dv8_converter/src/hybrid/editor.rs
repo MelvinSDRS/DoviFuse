@@ -1,13 +1,60 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+
+use serde::Serialize;
 
 use crate::exec::AppResult;
 use crate::mediainfo::HybridMediaInfo;
 
 use super::align::AlignmentStrategy;
-use super::letterbox::ActiveAreaChoice;
+use super::letterbox::{ActiveAreaChoice, Bars};
 
-#[derive(Clone, PartialEq, Eq)]
+/// dovi_tool editor config (`editor -j`). Field names and shapes mirror
+/// `EditConfig` in dovi_tool/src/dovi/editor.rs, which deserializes with
+/// `deny_unknown_fields` — any drift fails loudly at the editor step.
+#[derive(Serialize, Debug, PartialEq)]
+pub(crate) struct EditorConfig {
+    pub(crate) mode: u8,
+    pub(crate) remove_cmv4: bool,
+    pub(crate) remove_mapping: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) remove: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) duplicate: Option<Vec<DuplicateEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) active_area: Option<ActiveArea>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) level6: Option<Level6Meta>,
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub(crate) struct DuplicateEntry {
+    pub(crate) source: u64,
+    pub(crate) offset: u64,
+    pub(crate) length: u64,
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub(crate) struct ActiveArea {
+    pub(crate) crop: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) presets: Option<Vec<ActiveAreaPreset>>,
+    /// BTreeMap keeps serialized key order deterministic for snapshots.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) edits: Option<BTreeMap<String, u16>>,
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub(crate) struct ActiveAreaPreset {
+    pub(crate) id: u16,
+    pub(crate) left: u16,
+    pub(crate) right: u16,
+    pub(crate) top: u16,
+    pub(crate) bottom: u16,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Level6Meta {
     pub(crate) max_display_mastering_luminance: u16,
     pub(crate) min_display_mastering_luminance: u16,
@@ -40,10 +87,28 @@ pub(crate) fn l6_from_media_info(info: &HybridMediaInfo) -> Option<Level6Meta> {
     })
 }
 
-pub(crate) fn build_active_area_json(
+fn preset_from_bars(id: u16, b: &Bars) -> ActiveAreaPreset {
+    ActiveAreaPreset {
+        id,
+        left: b.left.min(u16::MAX as u32) as u16,
+        right: b.right.min(u16::MAX as u32) as u16,
+        top: b.top.min(u16::MAX as u32) as u16,
+        bottom: b.bottom.min(u16::MAX as u32) as u16,
+    }
+}
+
+fn edits_all(id: u16) -> BTreeMap<String, u16> {
+    let mut edits = BTreeMap::new();
+    edits.insert("all".to_string(), id);
+    edits
+}
+
+/// Legacy fallback: derive the active area from the resolution difference
+/// between the two sources when no measurement is available.
+pub(crate) fn resolution_active_area(
     dv_info: &HybridMediaInfo,
     hdr_info: &HybridMediaInfo,
-) -> Option<String> {
+) -> Option<ActiveArea> {
     let (Some(dw), Some(dh), Some(hw), Some(hh)) = (
         dv_info.width,
         dv_info.height,
@@ -58,24 +123,87 @@ pub(crate) fn build_active_area_json(
     }
 
     let target_bigger_or_equal = hw >= dw && hh >= dh;
-    let target_smaller_or_equal = hw <= dw && hh <= dh;
 
-    if target_bigger_or_equal && (hw > dw || hh > dh) {
-        let left = (hw - dw) / 2;
-        let right = (hw - dw) / 2;
-        let top = (hh - dh) / 2;
-        let bottom = (hh - dh) / 2;
-
-        return Some(format!(
-            "{{\n    \"presets\": [{{\"id\": 1, \"left\": {left}, \"right\": {right}, \"top\": {top}, \"bottom\": {bottom}}}],\n    \"edits\": {{\"all\": 1}}\n  }}"
-        ));
+    if target_bigger_or_equal {
+        // Target canvas is larger: the picture sits centered inside it, so
+        // the L5 offsets are half the canvas delta on each axis.
+        let bars = Bars {
+            left: (hw - dw) / 2,
+            right: (hw - dw) / 2,
+            top: (hh - dh) / 2,
+            bottom: (hh - dh) / 2,
+        };
+        return Some(ActiveArea {
+            crop: false,
+            presets: Some(vec![preset_from_bars(1, &bars)]),
+            edits: Some(edits_all(1)),
+        });
     }
 
-    if target_smaller_or_equal && (hw < dw || hh < dh) {
-        return Some("{\"crop\": true}".to_string());
-    }
+    // Target smaller or mixed: zero out L5 so stale source offsets don't
+    // misplace the active area on the new canvas.
+    Some(ActiveArea {
+        crop: true,
+        presets: None,
+        edits: None,
+    })
+}
 
-    Some("{\"crop\": true}".to_string())
+/// Assemble the full editor config. Pure — snapshot-tested below.
+pub(crate) fn build_editor_config(
+    strategy: &AlignmentStrategy,
+    dv_profile: Option<u8>,
+    dv_info: &HybridMediaInfo,
+    hdr_info: &HybridMediaInfo,
+    active_area: &ActiveAreaChoice,
+) -> EditorConfig {
+    let mode = if dv_profile == Some(5) { 3 } else { 2 };
+
+    let remove = if strategy.remove_ranges.is_empty() {
+        None
+    } else {
+        Some(strategy.remove_ranges.clone())
+    };
+
+    let duplicate = if strategy.duplicates.is_empty() {
+        None
+    } else {
+        Some(
+            strategy
+                .duplicates
+                .iter()
+                .map(|d| DuplicateEntry {
+                    source: d.source,
+                    offset: d.offset,
+                    length: d.length,
+                })
+                .collect(),
+        )
+    };
+
+    let active_area = match active_area {
+        ActiveAreaChoice::Keep => None,
+        ActiveAreaChoice::Resolution => resolution_active_area(dv_info, hdr_info),
+        ActiveAreaChoice::Measured(b) => Some(ActiveArea {
+            crop: true,
+            presets: Some(vec![preset_from_bars(1, b)]),
+            edits: Some(edits_all(1)),
+        }),
+    };
+
+    let dv_l6 = l6_from_media_info(dv_info);
+    let hdr_l6 = l6_from_media_info(hdr_info);
+    let level6 = hdr_l6.filter(|target| dv_l6.as_ref() != Some(target));
+
+    EditorConfig {
+        mode,
+        remove_cmv4: false,
+        remove_mapping: true,
+        remove,
+        duplicate,
+        active_area,
+        level6,
+    }
 }
 
 pub(crate) fn hybrid_build_editor_json(
@@ -86,72 +214,12 @@ pub(crate) fn hybrid_build_editor_json(
     active_area: &ActiveAreaChoice,
     json_output_path: &Path,
 ) -> AppResult<()> {
-    let mode = if dv_profile == Some(5) { 3 } else { 2 };
+    let config = build_editor_config(strategy, dv_profile, dv_info, hdr_info, active_area);
 
-    let mut fields: Vec<String> = Vec::new();
-    fields.push(format!("  \"mode\": {mode}"));
-    fields.push("  \"remove_cmv4\": false".to_string());
-    fields.push("  \"remove_mapping\": true".to_string());
+    let mut json = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize editor config: {e}"))?;
+    json.push('\n');
 
-    if !strategy.remove_ranges.is_empty() {
-        let values = strategy
-            .remove_ranges
-            .iter()
-            .map(|s| format!("\"{s}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
-        fields.push(format!("  \"remove\": [{values}]"));
-    }
-
-    if !strategy.duplicates.is_empty() {
-        let mut dup_json = String::from("  \"duplicate\": [\n");
-        for (idx, d) in strategy.duplicates.iter().enumerate() {
-            let comma = if idx + 1 == strategy.duplicates.len() {
-                ""
-            } else {
-                ","
-            };
-            dup_json.push_str(&format!(
-                "    {{\"source\": {}, \"offset\": {}, \"length\": {}}}{}\n",
-                d.source, d.offset, d.length, comma
-            ));
-        }
-        dup_json.push_str("  ]");
-        fields.push(dup_json);
-    }
-
-    match active_area {
-        ActiveAreaChoice::Keep => {}
-        ActiveAreaChoice::Resolution => {
-            if let Some(active_area_json) = build_active_area_json(dv_info, hdr_info) {
-                fields.push(format!("  \"active_area\": {active_area_json}"));
-            }
-        }
-        ActiveAreaChoice::Measured(b) => {
-            fields.push(format!(
-                "  \"active_area\": {{\n    \"crop\": true,\n    \"presets\": [{{\"id\": 1, \"left\": {}, \"right\": {}, \"top\": {}, \"bottom\": {}}}],\n    \"edits\": {{\"all\": 1}}\n  }}",
-                b.left, b.right, b.top, b.bottom
-            ));
-        }
-    }
-
-    let dv_l6 = l6_from_media_info(dv_info);
-    let hdr_l6 = l6_from_media_info(hdr_info);
-    if let Some(target_l6) = hdr_l6 {
-        let should_override = dv_l6.as_ref().map(|src| src != &target_l6).unwrap_or(true);
-
-        if should_override {
-            fields.push(format!(
-                "  \"level6\": {{\"max_display_mastering_luminance\": {}, \"min_display_mastering_luminance\": {}, \"max_content_light_level\": {}, \"max_frame_average_light_level\": {}}}",
-                target_l6.max_display_mastering_luminance,
-                target_l6.min_display_mastering_luminance,
-                target_l6.max_content_light_level,
-                target_l6.max_frame_average_light_level
-            ));
-        }
-    }
-
-    let json = format!("{{\n{}\n}}\n", fields.join(",\n"));
     fs::write(json_output_path, json).map_err(|e| {
         format!(
             "Failed to write editor JSON {}: {e}",
@@ -160,4 +228,334 @@ pub(crate) fn hybrid_build_editor_json(
     })?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hybrid::align::DuplicateOp;
+
+    fn info(w: u32, h: u32) -> HybridMediaInfo {
+        HybridMediaInfo {
+            width: Some(w),
+            height: Some(h),
+            ..Default::default()
+        }
+    }
+
+    fn info_with_l6(w: u32, h: u32, max_nits: f64, max_cll: u16) -> HybridMediaInfo {
+        HybridMediaInfo {
+            width: Some(w),
+            height: Some(h),
+            max_cll: Some(max_cll),
+            max_fall: Some(400),
+            mastering_min_nits: Some(0.005),
+            mastering_max_nits: Some(max_nits),
+            ..Default::default()
+        }
+    }
+
+    fn strategy(remove: &[&str], dups: &[(u64, u64, u64)]) -> AlignmentStrategy {
+        AlignmentStrategy {
+            remove_ranges: remove.iter().map(|s| s.to_string()).collect(),
+            duplicates: dups
+                .iter()
+                .map(|&(source, offset, length)| DuplicateOp {
+                    source,
+                    offset,
+                    length,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    fn render(config: &EditorConfig) -> String {
+        serde_json::to_string_pretty(config).unwrap()
+    }
+
+    #[test]
+    fn snapshot_mode2_minimal() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(7),
+            &info(3840, 2160),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true
+}"#
+        );
+    }
+
+    #[test]
+    fn snapshot_mode3_for_profile5() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(5),
+            &info(3840, 2160),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(c.mode, 3);
+        assert!(render(&c).contains("\"mode\": 3"));
+    }
+
+    #[test]
+    fn snapshot_positive_offset_remove_ranges() {
+        let c = build_editor_config(
+            &strategy(&["0-24", "1127-1151"], &[]),
+            Some(8),
+            &info(3840, 2160),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true,
+  "remove": [
+    "0-24",
+    "1127-1151"
+  ]
+}"#
+        );
+    }
+
+    #[test]
+    fn snapshot_negative_offset_duplicates() {
+        let c = build_editor_config(
+            &strategy(&[], &[(0, 0, 25)]),
+            Some(8),
+            &info(3840, 2160),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true,
+  "duplicate": [
+    {
+      "source": 0,
+      "offset": 0,
+      "length": 25
+    }
+  ]
+}"#
+        );
+    }
+
+    #[test]
+    fn snapshot_mixed_remove_and_duplicate() {
+        // Negative start offset (pad) plus end pad: two duplicates; or
+        // start trim plus end pad: remove + duplicate. Cover the latter.
+        let c = build_editor_config(
+            &strategy(&["0-9"], &[(1141, 1142, 5)]),
+            Some(7),
+            &info(3840, 2160),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true,
+  "remove": [
+    "0-9"
+  ],
+  "duplicate": [
+    {
+      "source": 1141,
+      "offset": 1142,
+      "length": 5
+    }
+  ]
+}"#
+        );
+    }
+
+    #[test]
+    fn snapshot_measured_letterbox() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(8),
+            &info(3840, 2160),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Measured(Bars {
+                left: 0,
+                right: 0,
+                top: 276,
+                bottom: 276,
+            }),
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true,
+  "active_area": {
+    "crop": true,
+    "presets": [
+      {
+        "id": 1,
+        "left": 0,
+        "right": 0,
+        "top": 276,
+        "bottom": 276
+      }
+    ],
+    "edits": {
+      "all": 1
+    }
+  }
+}"#
+        );
+    }
+
+    #[test]
+    fn snapshot_resolution_target_bigger() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(7),
+            &info(3840, 1608),
+            &info(3840, 2160),
+            &ActiveAreaChoice::Resolution,
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true,
+  "active_area": {
+    "crop": false,
+    "presets": [
+      {
+        "id": 1,
+        "left": 0,
+        "right": 0,
+        "top": 276,
+        "bottom": 276
+      }
+    ],
+    "edits": {
+      "all": 1
+    }
+  }
+}"#
+        );
+    }
+
+    #[test]
+    fn resolution_target_smaller_crops_only() {
+        let aa = resolution_active_area(&info(3840, 2160), &info(1920, 1080)).unwrap();
+        assert!(aa.crop);
+        assert!(aa.presets.is_none());
+        assert!(aa.edits.is_none());
+    }
+
+    #[test]
+    fn resolution_same_canvas_none() {
+        assert!(resolution_active_area(&info(3840, 2160), &info(3840, 2160)).is_none());
+        let missing = HybridMediaInfo::default();
+        assert!(resolution_active_area(&missing, &info(3840, 2160)).is_none());
+    }
+
+    #[test]
+    fn snapshot_level6_override_when_differs() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(8),
+            &info_with_l6(3840, 2160, 4000.0, 4000),
+            &info_with_l6(3840, 2160, 1000.0, 1000),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(
+            render(&c),
+            r#"{
+  "mode": 2,
+  "remove_cmv4": false,
+  "remove_mapping": true,
+  "level6": {
+    "max_display_mastering_luminance": 1000,
+    "min_display_mastering_luminance": 50,
+    "max_content_light_level": 1000,
+    "max_frame_average_light_level": 400
+  }
+}"#
+        );
+    }
+
+    #[test]
+    fn level6_skipped_when_equal() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(8),
+            &info_with_l6(3840, 2160, 1000.0, 1000),
+            &info_with_l6(3840, 2160, 1000.0, 1000),
+            &ActiveAreaChoice::Keep,
+        );
+        assert!(c.level6.is_none());
+    }
+
+    #[test]
+    fn level6_applied_when_dv_missing() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            Some(8),
+            &info(3840, 2160),
+            &info_with_l6(3840, 2160, 1000.0, 1000),
+            &ActiveAreaChoice::Keep,
+        );
+        assert_eq!(
+            c.level6,
+            Some(Level6Meta {
+                max_display_mastering_luminance: 1000,
+                min_display_mastering_luminance: 50,
+                max_content_light_level: 1000,
+                max_frame_average_light_level: 400,
+            })
+        );
+    }
+
+    #[test]
+    fn l6_min_luminance_scaling() {
+        // Fractional nits are stored as 1/10000 nit units; integer nits kept.
+        let frac = info_with_l6(1, 1, 1000.0, 1000);
+        assert_eq!(
+            l6_from_media_info(&frac)
+                .unwrap()
+                .min_display_mastering_luminance,
+            50
+        );
+        let mut int_nits = info_with_l6(1, 1, 1000.0, 1000);
+        int_nits.mastering_min_nits = Some(5.0);
+        assert_eq!(
+            l6_from_media_info(&int_nits)
+                .unwrap()
+                .min_display_mastering_luminance,
+            5
+        );
+        let mut zero = info_with_l6(1, 1, 1000.0, 1000);
+        zero.mastering_min_nits = Some(0.00001);
+        assert_eq!(
+            l6_from_media_info(&zero)
+                .unwrap()
+                .min_display_mastering_luminance,
+            1
+        );
+    }
 }
