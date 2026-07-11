@@ -103,7 +103,8 @@ Hybrid-only flags:
 - `--sync <scenes|framecount>`: alignment mode (default `scenes`).
   Single-shot content with no detectable cuts needs `framecount`.
 - `--force`: fall back to the framecount heuristic when scene correlation
-  fails instead of aborting (output is then verified post-inject).
+  fails instead of aborting (output is then verified post-inject). Also
+  lets an undetectable DV profile through preflight (assumed P7/P8).
 - `--max-offset <frames>`: correlation search window (default 5 minutes).
 - `--scene-threshold <f>`: ffmpeg scdet threshold (default 8.0).
 - `--grade-check <metadata|sampled|full>`: grade gate depth (default

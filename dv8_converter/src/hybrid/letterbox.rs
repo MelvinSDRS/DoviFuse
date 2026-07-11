@@ -250,6 +250,20 @@ pub(crate) fn decide_active_area(
         }
     }
 
+    // The preset offsets can't be compared or kept across differing canvases,
+    // but multiple distinct presets are still proof of a variable-AR film:
+    // flattening to one measured L5 gives IMAX-style scenes the wrong active
+    // area, so don't do it silently.
+    if !canvas_match && distinct.len() > 1 {
+        logs.push((
+            true,
+            format!(
+                "RPU has {} distinct L5 presets (variable AR) but the canvases differ - applying a single measured L5; IMAX-style scenes will carry the wrong active area. Verify letterbox after conversion",
+                distinct.len()
+            ),
+        ));
+    }
+
     let from = distinct
         .first()
         .map(|p| format!("L{} R{} T{} B{}", p.left, p.right, p.top, p.bottom))
@@ -391,8 +405,10 @@ mod tests {
         // RPU says zero bars but target is letterboxed
         let (choice, _) = decide_active_area(Some((measured, 0)), &[Bars::ZERO], true);
         assert_eq!(choice, ActiveAreaChoice::Measured(measured));
-        // different canvas: always measured, even with multiple presets
-        let (choice, _) = decide_active_area(
+        // different canvas: always measured, even with multiple presets -
+        // but flattening a variable-AR RPU must be warned about, even when
+        // every sampled window happened to land in same-AR scenes.
+        let (choice, logs) = decide_active_area(
             Some((measured, 0)),
             &[
                 Bars::ZERO,
@@ -406,6 +422,11 @@ mod tests {
             false,
         );
         assert_eq!(choice, ActiveAreaChoice::Measured(measured));
+        assert!(
+            logs.iter()
+                .any(|(warn, m)| *warn && m.contains("canvases differ")),
+            "{logs:?}"
+        );
     }
 
     #[test]

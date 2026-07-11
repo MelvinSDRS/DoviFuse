@@ -54,7 +54,7 @@ fn compute_alignment(
     logger: &Logger,
 ) -> AppResult<AlignmentStrategy> {
     if opts.sync == SyncMode::Framecount {
-        return Ok(compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps));
+        return compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps);
     }
 
     let dv_cuts = export_dv_scene_cuts(hybrid_rpu, dv_scenes_txt, rt, logger)?;
@@ -109,7 +109,7 @@ fn compute_alignment(
             if opts.force {
                 logger
                     .warn("--force: falling back to the frame-count heuristic (sync NOT verified)");
-                Ok(compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps))
+                compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps)
             } else {
                 Err(format!(
                     "Scene-cut sync failed: {reason}. Re-run with --force to use the frame-count heuristic, or --sync framecount."

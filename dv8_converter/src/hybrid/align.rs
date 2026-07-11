@@ -115,7 +115,14 @@ pub(crate) fn compute_alignment_framecount(
     dv_frames: u64,
     hdr_frames: u64,
     fps: f64,
-) -> AlignmentStrategy {
+) -> AppResult<AlignmentStrategy> {
+    // Preflight rejects zero frame counts, but don't rely on that distant
+    // gate: a zero count here would produce a remove-everything config or a
+    // fully unverified "leave as-is" output.
+    if dv_frames == 0 || hdr_frames == 0 {
+        return Err("Cannot align: zero frame count".to_string());
+    }
+
     let mut strategy = AlignmentStrategy::default();
 
     let abs_diff = dv_frames.abs_diff(hdr_frames);
@@ -123,7 +130,7 @@ pub(crate) fn compute_alignment_framecount(
     strategy.description = format!("No alignment needed (frame counts match: {dv_frames})");
 
     if abs_diff == 0 {
-        return strategy;
+        return Ok(strategy);
     }
 
     let small = (fps * 2.0).round() as u64;
@@ -148,7 +155,7 @@ pub(crate) fn compute_alignment_framecount(
                 length: abs_diff,
             });
         }
-        return strategy;
+        return Ok(strategy);
     }
 
     if abs_diff <= medium {
@@ -170,7 +177,7 @@ pub(crate) fn compute_alignment_framecount(
             });
             strategy.start_offset = -(abs_diff as i64);
         }
-        return strategy;
+        return Ok(strategy);
     }
 
     if abs_diff <= large {
@@ -195,14 +202,14 @@ pub(crate) fn compute_alignment_framecount(
             });
             strategy.start_offset = -(abs_diff as i64);
         }
-        return strategy;
+        return Ok(strategy);
     }
 
     strategy.high_risk = true;
     strategy.description = format!(
         "Frame diff ({abs_diff}) exceeds 5-minute heuristic at {fps:.3} fps; leaving as-is"
     );
-    strategy
+    Ok(strategy)
 }
 
 #[cfg(test)]
@@ -306,21 +313,21 @@ mod tests {
 
     #[test]
     fn framecount_no_diff() {
-        let s = compute_alignment_framecount(1000, 1000, 23.976);
+        let s = compute_alignment_framecount(1000, 1000, 23.976).unwrap();
         assert_eq!(s.action, "none");
         assert!(s.remove_ranges.is_empty() && s.duplicates.is_empty());
     }
 
     #[test]
     fn framecount_small_diff_trims_end() {
-        let s = compute_alignment_framecount(1010, 1000, 23.976);
+        let s = compute_alignment_framecount(1010, 1000, 23.976).unwrap();
         assert_eq!(s.action, "remove_end");
         assert_eq!(s.remove_ranges, vec!["1000-1009".to_string()]);
     }
 
     #[test]
     fn framecount_small_diff_pads_end() {
-        let s = compute_alignment_framecount(1000, 1010, 23.976);
+        let s = compute_alignment_framecount(1000, 1010, 23.976).unwrap();
         assert_eq!(s.action, "duplicate_end");
         assert_eq!(s.duplicates.len(), 1);
         assert_eq!(s.duplicates[0].source, 999);
@@ -330,7 +337,7 @@ mod tests {
 
     #[test]
     fn framecount_medium_diff_trims_start() {
-        let s = compute_alignment_framecount(2000, 1000, 23.976);
+        let s = compute_alignment_framecount(2000, 1000, 23.976).unwrap();
         assert_eq!(s.action, "remove_start");
         assert_eq!(s.remove_ranges, vec!["0-999".to_string()]);
         assert!(!s.high_risk);
@@ -338,8 +345,17 @@ mod tests {
 
     #[test]
     fn framecount_huge_diff_left_as_is() {
-        let s = compute_alignment_framecount(100_000, 1000, 23.976);
+        let s = compute_alignment_framecount(100_000, 1000, 23.976).unwrap();
         assert!(s.high_risk);
         assert!(s.remove_ranges.is_empty() && s.duplicates.is_empty());
+    }
+
+    #[test]
+    fn framecount_zero_frames_rejected() {
+        // A zero count must never reach the bucket heuristics: a short file
+        // would get a remove-everything config, a long one an unverified
+        // "leave as-is".
+        assert!(compute_alignment_framecount(0, 1000, 23.976).is_err());
+        assert!(compute_alignment_framecount(1000, 0, 23.976).is_err());
     }
 }
