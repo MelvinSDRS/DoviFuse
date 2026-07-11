@@ -158,14 +158,24 @@ pub(crate) fn parse_cropdetect(stderr: &str) -> Option<CropRect> {
 }
 
 /// Decode a window of `file` and return per-frame luma statistics
-/// (code values at the source bit depth).
+/// (code values at the source bit depth). `crop` restricts the measurement
+/// to that rectangle — pass the detected active area so letterbox bars
+/// don't drag the average down.
 pub(crate) fn measure_luma_window(
     rt: &Runtime,
     logger: &Logger,
     file: &Path,
     w: &SampleWindow,
+    crop: Option<&CropRect>,
 ) -> AppResult<Vec<FrameLuma>> {
     let (ffmpeg, _) = rt.require_ffmpeg()?;
+    let filter = match crop {
+        Some(c) => format!(
+            "crop={}:{}:{}:{},signalstats,metadata=mode=print:file=-",
+            c.w, c.h, c.x, c.y
+        ),
+        None => "signalstats,metadata=mode=print:file=-".to_string(),
+    };
     let args = vec![
         OsString::from("-nostdin"),
         OsString::from("-hide_banner"),
@@ -180,7 +190,7 @@ pub(crate) fn measure_luma_window(
         OsString::from("-t"),
         OsString::from(format!("{:.3}", w.dur_s)),
         OsString::from("-vf"),
-        OsString::from("signalstats,metadata=mode=print:file=-"),
+        OsString::from(filter),
         OsString::from("-fps_mode"),
         OsString::from("passthrough"),
         OsString::from("-an"),

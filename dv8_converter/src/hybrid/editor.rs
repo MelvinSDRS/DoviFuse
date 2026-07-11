@@ -5,6 +5,7 @@ use crate::exec::AppResult;
 use crate::mediainfo::HybridMediaInfo;
 
 use super::align::AlignmentStrategy;
+use super::letterbox::ActiveAreaChoice;
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Level6Meta {
@@ -82,6 +83,7 @@ pub(crate) fn hybrid_build_editor_json(
     dv_profile: Option<u8>,
     dv_info: &HybridMediaInfo,
     hdr_info: &HybridMediaInfo,
+    active_area: &ActiveAreaChoice,
     json_output_path: &Path,
 ) -> AppResult<()> {
     let mode = if dv_profile == Some(5) { 3 } else { 2 };
@@ -118,8 +120,19 @@ pub(crate) fn hybrid_build_editor_json(
         fields.push(dup_json);
     }
 
-    if let Some(active_area_json) = build_active_area_json(dv_info, hdr_info) {
-        fields.push(format!("  \"active_area\": {active_area_json}"));
+    match active_area {
+        ActiveAreaChoice::Keep => {}
+        ActiveAreaChoice::Resolution => {
+            if let Some(active_area_json) = build_active_area_json(dv_info, hdr_info) {
+                fields.push(format!("  \"active_area\": {active_area_json}"));
+            }
+        }
+        ActiveAreaChoice::Measured(b) => {
+            fields.push(format!(
+                "  \"active_area\": {{\n    \"crop\": true,\n    \"presets\": [{{\"id\": 1, \"left\": {}, \"right\": {}, \"top\": {}, \"bottom\": {}}}],\n    \"edits\": {{\"all\": 1}}\n  }}",
+                b.left, b.right, b.top, b.bottom
+            ));
+        }
     }
 
     let dv_l6 = l6_from_media_info(dv_info);

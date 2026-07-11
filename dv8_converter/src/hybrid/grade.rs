@@ -17,7 +17,7 @@ use std::path::Path;
 
 use crate::cli::GradeCheckMode;
 use crate::exec::AppResult;
-use crate::ffmpeg::{measure_luma_window, sample_windows, FrameLuma, SampleWindow};
+use crate::ffmpeg::{cropdetect_window, measure_luma_window, sample_windows, FrameLuma, SampleWindow};
 use crate::logger::Logger;
 use crate::mediainfo::HybridMediaInfo;
 use crate::pq::{code_limited_to_pq, pq_to_nits};
@@ -36,6 +36,9 @@ const DV_WINDOW_PAD_S: f64 = 2.0;
 /// Skip the peak-ratio check when both p99 values are this dark (ratio of
 /// near-black values is meaningless).
 const PEAK_MIN_NITS: f64 = 50.0;
+/// cropdetect threshold used to exclude letterbox bars from measurement
+/// (bars in one source but not the other would skew YAVG).
+const GRADE_CROP_LIMIT: f64 = 0.08;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Verdict {
@@ -216,7 +219,6 @@ pub(crate) fn run_grade_check(
             let windows = sample_windows(duration_s, window_count, 5.0);
             let pad_frames = (DV_WINDOW_PAD_S * fps).ceil() as i64;
             for w in &windows {
-                let hdr_series = measure_luma_window(rt, logger, hdr_target, w)?;
                 // DV window: same content position, shifted by the sync
                 // offset, padded both sides for the lag search.
                 let dv_start = (w.start_s + offset_s - DV_WINDOW_PAD_S).max(0.0);
@@ -224,7 +226,12 @@ pub(crate) fn run_grade_check(
                     start_s: dv_start,
                     dur_s: w.dur_s + 2.0 * DV_WINDOW_PAD_S,
                 };
-                let dv_series = measure_luma_window(rt, logger, dv_source, &dv_w)?;
+                let hdr_crop = cropdetect_window(rt, logger, hdr_target, w, GRADE_CROP_LIMIT)?;
+                let dv_crop = cropdetect_window(rt, logger, dv_source, &dv_w, GRADE_CROP_LIMIT)?;
+                let hdr_series =
+                    measure_luma_window(rt, logger, hdr_target, w, hdr_crop.as_ref())?;
+                let dv_series =
+                    measure_luma_window(rt, logger, dv_source, &dv_w, dv_crop.as_ref())?;
                 window_pairs.push((hdr_series, dv_series, 0..=2 * pad_frames));
             }
         }
@@ -233,9 +240,16 @@ pub(crate) fn run_grade_check(
                 start_s: 0.0,
                 dur_s: duration_s + 2.0,
             };
+            // One representative crop per source (mid-file window).
+            let mid = SampleWindow {
+                start_s: duration_s * 0.5,
+                dur_s: 5.0,
+            };
+            let hdr_crop = cropdetect_window(rt, logger, hdr_target, &mid, GRADE_CROP_LIMIT)?;
+            let dv_crop = cropdetect_window(rt, logger, dv_source, &mid, GRADE_CROP_LIMIT)?;
             logger.log("Measuring full runtime of both sources (two full decodes)...");
-            let hdr_series = measure_luma_window(rt, logger, hdr_target, &full)?;
-            let dv_series = measure_luma_window(rt, logger, dv_source, &full)?;
+            let hdr_series = measure_luma_window(rt, logger, hdr_target, &full, hdr_crop.as_ref())?;
+            let dv_series = measure_luma_window(rt, logger, dv_source, &full, dv_crop.as_ref())?;
 
             // Apply the global offset by slicing, then evaluate in chunks so
             // a localized regrade can't hide in a whole-film average.
