@@ -72,6 +72,11 @@ pub(crate) fn hybrid_validate_output(
 
     let out_info = hybrid_get_media_info(out_file, rt, logger)?;
     let hdr_info = hybrid_get_media_info(hdr_target, rt, logger)?;
+    if !crate::mediainfo::has_hdr10_base(&out_info) {
+        return Err(
+            "Validation failed: output must have a 10-bit BT.2020 PQ base layer".to_string(),
+        );
+    }
 
     let codec = format!("{} {}", out_info.codec, out_info.codec_id).to_lowercase();
     if !(codec.contains("hevc")

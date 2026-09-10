@@ -1,0 +1,24 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+		A10000000000000000000001 = {isa = PBXProject; attributes = {LastSwiftUpdateCheck = 2700; LastUpgradeCheck = 2700;}; buildConfigurationList = A10000000000000000000002; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A10000000000000000000003; productRefGroup = A10000000000000000000004; projectDirPath = ""; projectRoot = ""; targets = (A10000000000000000000005);};
+		A10000000000000000000003 = {isa = PBXGroup; children = (A10000000000000000000006, A10000000000000000000004); sourceTree = "<group>";};
+		A10000000000000000000004 = {isa = PBXGroup; children = (A10000000000000000000007); name = Products; sourceTree = "<group>";};
+		A10000000000000000000006 = {isa = PBXFileSystemSynchronizedRootGroup; path = DV8Maker; sourceTree = "<group>";};
+		A10000000000000000000007 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DV8 Maker.app"; sourceTree = BUILT_PRODUCTS_DIR;};
+		A10000000000000000000005 = {isa = PBXNativeTarget; buildConfigurationList = A10000000000000000000008; buildPhases = (A10000000000000000000009, A1000000000000000000000A, A1000000000000000000000B); buildRules = (); dependencies = (); fileSystemSynchronizedGroups = (A10000000000000000000006); name = DV8Maker; packageProductDependencies = (); productName = "DV8 Maker"; productReference = A10000000000000000000007; productType = "com.apple.product-type.application";};
+		A10000000000000000000009 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+		A1000000000000000000000A = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+		A1000000000000000000000B = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+		A10000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (A1000000000000000000000C, A1000000000000000000000D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+		A10000000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (A1000000000000000000000E, A1000000000000000000000F); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+		A1000000000000000000000C = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; SWIFT_VERSION = 6.0;}; name = Debug;};
+		A1000000000000000000000D = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; SWIFT_VERSION = 6.0;}; name = Release;};
+		A1000000000000000000000E = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGNING_ALLOWED = NO; CURRENT_PROJECT_VERSION = 1; ENABLE_APP_SANDBOX = NO; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "DV8 Maker"; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video"; MACOSX_DEPLOYMENT_TARGET = 15.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.melvinsiadous.DV8Maker; PRODUCT_NAME = "DV8 Maker"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 6.0;}; name = Debug;};
+		A1000000000000000000000F = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGNING_ALLOWED = NO; CURRENT_PROJECT_VERSION = 1; ENABLE_APP_SANDBOX = NO; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "DV8 Maker"; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video"; MACOSX_DEPLOYMENT_TARGET = 15.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.melvinsiadous.DV8Maker; PRODUCT_NAME = "DV8 Maker"; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 6.0;}; name = Release;};
+	};
+	rootObject = A10000000000000000000001;
+}

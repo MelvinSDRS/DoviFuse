@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "gates": [
+    {
+      "id": "full-length-performance",
+      "status": "pending",
+      "required_evidence": "Authorized full-length copies: runtime, peak memory, scratch usage and cancellation latency.",
+      "evidence": []
+    },
+    {
+      "id": "dolby-playback-qc",
+      "status": "pending",
+      "required_evidence": "Manual Dolby-capable playback for highlights, dark scenes, sync and aspect ratio changes.",
+      "evidence": []
+    },
+    {
+      "id": "container-preservation",
+      "status": "passed",
+      "required_evidence": "Independent manifests and extracted hashes for audio, subtitles, chapters, attachments, video metadata and timestamps.",
+      "evidence": [
+        {
+          "path": "docs/evidence/2026-09-08-container-preservation.json",
+          "sha256": "d0008030b0a71ea2c91bf33a5e38eb90089c820147f01c6b45a141041b7d3ad9",
+          "reviewer": "Codex, observed Linux and bundled Mac execution",
+          "method": "Independently authored multi-track synthetic fixtures; extracted payload/VCL hashes, chapter XML and timestamps; video headers/order; forced header-loss rejection and source retention; canonical Unicode cross-platform regression. Scope and codec limits recorded in evidence."
+        }
+      ]
+    },
+    {
+      "id": "app-report-consistency",
+      "status": "passed",
+      "required_evidence": "Report identity, inconclusive results, source retention, repair binding and output-drain completion ordering.",
+      "evidence": [
+        {
+          "path": "docs/evidence/2026-09-10-main-p5-split.json",
+          "sha256": "73145d981702b97b84ff726be82c9cfb1e95021099bd60c5c0e75fb6c2512a54",
+          "reviewer": "Codex, observed Linux and bundled/installed Mac execution",
+          "method": "26 actual CLI job/report traces replayed through AppModel, including six P5 refusals; input identity, stale repair, pipe drain, trailing JSON, missing completion and outcome precedence controls. Full results and source hashes recorded in evidence."
+        }
+      ]
+    }
+  ],
+  "workflow": "p7-p8-only",
+  "p5_hybrid": "disabled"
+}

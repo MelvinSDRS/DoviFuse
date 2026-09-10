@@ -1,0 +1,35 @@
+{
+  "operation": "private_excerpt_injection_payload_preservation",
+  "scope": "Elementary-stream mechanics only. Not a playable hybrid acceptance, alignment or creative-grade verdict. No output MKV produced.",
+  "frames": 341,
+  "frame_metadata": [
+    {
+      "frames": 341,
+      "hdr10plus_frames": 341
+    },
+    {
+      "frames": 341,
+      "hdr10plus_frames": 341
+    }
+  ],
+  "original_nal_types_preserved": {
+    "32": 5,
+    "33": 5,
+    "34": 5,
+    "39": 351,
+    "19": 5,
+    "40": 5,
+    "1": 168,
+    "0": 168
+  },
+  "injected_rpu_nals": 341,
+  "source_excerpt_sha256": {
+    "/tmp/dv8-private-p5-u_1rrdfe/p5.mkv": "6009018286d1100214aa96e5d486a7298fcaff293e0a153ed23373150fd4947b",
+    "/tmp/dv8-poor-things-pair-xdpzcqcb/hdr-1200s.mkv": "f4dc0851d7d553895c6b63f0a3c96d3530ac04d497e44bae75b9f030516785dc"
+  },
+  "source_excerpt_hashes_unchanged": true,
+  "automatic_hybrid_allowed": false,
+  "dovi_tool_version": "dovi_tool 2.3.1",
+  "dovi_tool_sha256": "48fec058afafb38d503f7e33e7594aaf088cc9882549c1dccfa5b55b5fcf1423",
+  "procedure": "mkvextract both existing private excerpts; dovi_tool -m 3 extract-rpu on P5; inject-rpu into HDR10+ elementary stream; compare every original NAL payload except AUD; ffprobe all decoded frames before/after. No output MKV or automatic grade override."
+}

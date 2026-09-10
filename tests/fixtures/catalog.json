@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "https://github.com/quietvoid/dovi_tool",
+    "revision": "b25558062e4a56973482ec70133bd7b891320e48",
+    "license": "dovi_tool/LICENSE"
+  },
+  "fixtures": [
+    {
+      "path": "dovi_tool/assets/tests/profile5.bin",
+      "sha256": "f2e6a33cdcad3bbe2be1baf0af6ff53a41dc63431477d29d138dbe4167dc13f2",
+      "kind": "upstream-metadata",
+      "color_reference": null,
+      "limits": "Metadata and bitstream mechanics only; no independent reconstructed color reference."
+    },
+    {
+      "path": "dovi_tool/assets/tests/fel_orig.bin",
+      "sha256": "b2b27714b7279c4e24d1a795cb6f95d3ad06745db96d360698ee0932184117a0",
+      "kind": "upstream-metadata",
+      "color_reference": null,
+      "limits": "Metadata and bitstream mechanics only; no independent reconstructed color reference."
+    },
+    {
+      "path": "dovi_tool/assets/tests/mel_orig.bin",
+      "sha256": "cabda945d36cd4c3eca9c2df05cf387562e648e3250be28632c9b2991f2ec60b",
+      "kind": "upstream-metadata",
+      "color_reference": null,
+      "limits": "Metadata and bitstream mechanics only; no independent reconstructed color reference."
+    },
+    {
+      "path": "dovi_tool/assets/hevc_tests/regular_rpu.bin",
+      "sha256": "14fba3e654287d096a3e06646c9e476a4c96f9f4af89b4cf08ef7c93d37b1ee8",
+      "kind": "upstream-metadata",
+      "color_reference": null,
+      "limits": "Metadata and bitstream mechanics only; no independent reconstructed color reference."
+    },
+    {
+      "path": "dovi_tool/assets/hevc_tests/regular_start_code_4_muxed_el.hevc",
+      "sha256": "968a31f36ceb785f43e097fa421f3e8b7e686f0c3973cc45bbb5ba48616de56a",
+      "kind": "upstream-bitstream",
+      "color_reference": null,
+      "limits": "Metadata and bitstream mechanics only; no independent reconstructed color reference."
+    }
+  ],
+  "synthetic": {
+    "recipe": "scripts/audit_fixtures.py",
+    "kind": "synthetic-mechanics-only",
+    "expected": {
+      "frames": 1090,
+      "fps": "24/1",
+      "canvas": [
+        320,
+        180
+      ],
+      "active_area": [
+        0,
+        0,
+        320,
+        180
+      ],
+      "rpu_offset_frames": 5,
+      "p7_frames": 259
+    },
+    "evidence": "Frame durations and offset are authored in the generator, independently of converter measurement. P7 frame count: upstream tests/rpu/info.rs; repeated FEL RPU is not the picture grade.",
+    "reference_color": null
+  }
+}

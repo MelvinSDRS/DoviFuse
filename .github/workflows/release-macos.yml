@@ -1,0 +1,150 @@
+name: Release DV8 Maker for macOS
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux regression gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned dovi_tool source and reference metadata
+        uses: actions/checkout@v4
+        with:
+          repository: quietvoid/dovi_tool
+          ref: b25558062e4a56973482ec70133bd7b891320e48
+          path: dovi_tool
+      - name: Install media test tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg mkvtoolnix mediainfo
+      - name: Build pinned dovi_tool
+        run: |
+          cargo build --locked --release --manifest-path dovi_tool/Cargo.toml --no-default-features --features internal-font
+          mkdir -p tools
+          ln -s ../dovi_tool/target/release/dovi_tool tools/dovi_tool
+          ln -s /usr/bin/ffmpeg tools/ffmpeg
+      - name: Prepare disposable media for both platforms
+        run: python3 scripts/audit_fixtures.py /tmp/dv8-ci-fixtures
+      - name: Rust, real tools and wrapper regression gates
+        env:
+          DV8_AUDIT_FIXTURES: /tmp/dv8-ci-fixtures
+          PYTHONOPTIMIZE: ''
+        run: ./scripts/test-linux.sh
+      - name: Share only prepared test media
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-mechanics-fixtures
+          path: |
+            /tmp/dv8-ci-fixtures/manifest.json
+            /tmp/dv8-ci-fixtures/*.mkv
+          if-no-files-found: error
+      - name: Preserve Linux test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-regression-evidence
+          path: |
+            /tmp/dv8-audit-*/*.log
+            /tmp/dv8-audit-*/summary.json
+            /tmp/dv8-audit-*/*.report.json
+            /tmp/dv8-report-controls-*/*.json
+            /tmp/dv8-report-controls-*/*.log
+            /tmp/dv8-rust-tests.*
+            /tmp/dv8-preservation-*/*.log
+            /tmp/dv8-preservation-*/summary.json
+            /tmp/dv8-l5-audit-*/*.log
+            /tmp/dv8-l5-audit-*/summary.json
+
+  release:
+    name: Build and verify Apple Silicon app
+    needs: linux
+    permissions:
+      contents: write
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Fetch pinned dovi_tool source
+        uses: actions/checkout@v4
+        with:
+          repository: quietvoid/dovi_tool
+          ref: b25558062e4a56973482ec70133bd7b891320e48
+          path: dovi_tool
+
+      - name: Download prepared disposable media
+        uses: actions/download-artifact@v4
+        with:
+          name: synthetic-mechanics-fixtures
+          path: /tmp/dv8-ci-fixtures
+
+      - name: Cache native build toolchain
+        uses: actions/cache@v4
+        with:
+          path: .macos-build-cache
+          key: dv8-macos-arm64-${{ hashFiles('macapp/build-macos-app.sh', 'dv8_converter/Cargo.lock', 'dovi_tool/Cargo.lock') }}
+          restore-keys: |
+            dv8-macos-arm64-
+
+      - name: Build self-contained app
+        run: |
+          DEVELOPER_DIR="$(xcode-select -p)" ./macapp/build-macos-app.sh
+
+      - name: Test packaged tools and app state
+        run: |
+          export DEVELOPER_DIR="$(xcode-select -p)"
+          ./scripts/test-macos-bundle.sh "dist/DV8 Maker.app" /tmp/dv8-ci-fixtures
+
+      - name: Preserve Mac test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-regression-evidence
+          path: |
+            /tmp/dv8-audit-*/*.log
+            /tmp/dv8-audit-*/summary.json
+            /tmp/dv8-audit-*/*.report.json
+            /tmp/dv8-report-controls-*/*.json
+            /tmp/dv8-report-controls-*/*.log
+            /tmp/dv8-preservation-*/*.log
+            /tmp/dv8-preservation-*/summary.json
+            /tmp/dv8-l5-audit-*/*.log
+            /tmp/dv8-l5-audit-*/summary.json
+
+      - name: Require hybrid release acceptance evidence
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: python3 scripts/verify_reference_catalog.py --release
+
+      - name: Create and verify DMG
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./macapp/create-dmg.sh
+
+      - name: Publish commit release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="main-${GITHUB_SHA}"
+          title="DV8 Maker ${GITHUB_SHA:0:7}"
+          dmg="dist/DV8-Maker-arm64.dmg"
+          checksum="dist/DV8-Maker-arm64.dmg.sha256"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$dmg" "$checksum" --clobber
+          else
+            gh release create "$tag" "$dmg" "$checksum" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "Automatic Apple Silicon build from commit $GITHUB_SHA. This personal-use app is ad-hoc signed; on first launch, right-click DV8 Maker and choose Open."
+          fi

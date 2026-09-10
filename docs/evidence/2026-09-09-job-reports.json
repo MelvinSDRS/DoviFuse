@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-09",
+  "scope": "General job reports, app terminal ordering and filesystem-bound repair; partial milestone 4",
+  "linux": {
+    "converter_tests": 96,
+    "pair_example_tests": 9,
+    "l5_example_tests": 4,
+    "clippy": "passed, warnings denied",
+    "real_tool_scenarios": 22,
+    "saved_scenario_reports": 20,
+    "real_tool_report_checks": "match emitted JSONL checks and terminal status",
+    "regression": "pair controls, active-area, preservation, L5 and queue wrapper passed",
+    "report_controls": {
+      "human_checks": 8,
+      "existing_report": "preserved",
+      "input_alias": "rejected; input unchanged",
+      "runtime_failure": "failed report",
+      "dry_run": "inconclusive",
+      "cancellation": "cancelled report; no completion",
+      "replaced_report": "unrelated replacement preserved; no completion",
+      "changed_input": "failed; no completion or repair authority",
+      "source_sha256": "fb014437a54ed7bcbd0f04ea5c2082605a5f4bf394feb915a5393df7704e280a"
+    }
+  },
+  "macos": {
+    "bundle": "Build, baseline, report controls, backend, preservation and L5 checks passed",
+    "state_tests": [
+      "input replacement",
+      "same-size change with restored mtime",
+      "termination before pipe drain",
+      "split/trailing JSON",
+      "old-run events",
+      "missing completion",
+      "invalid saved report",
+      "unknown/inconclusive precedence"
+    ],
+    "native_renders": "hybrid and checker inspected",
+    "installed_report_controls": {
+      "human_checks": 8,
+      "existing_report": "preserved",
+      "input_alias": "rejected; input unchanged",
+      "runtime_failure": "failed report",
+      "dry_run": "inconclusive",
+      "cancellation": "cancelled report; no completion",
+      "replaced_report": "unrelated replacement preserved; no completion",
+      "changed_input": "failed; no completion or repair authority",
+      "source_sha256": "4ae64cfa156ef732e83fc2de17c8c25afbbf18c0d7f0b9277aca6a6baa26baeb"
+    }
+  },
+  "deployment": {
+    "app": "/Users/melvinsiadous/Applications/DV8 Maker.app",
+    "pid_observed": 49399,
+    "converter_sha256": "eadae3385a5efdffc620259efb7a8c72aa9140fe0f6525a20da0af514440f2ef",
+    "staged_and_installed_converter": "identical bytes",
+    "signature": "strict deep verification passed after installed-tool tests",
+    "rollback": "/Users/melvinsiadous/Library/Application Support/DV8 Maker/Rollbacks/pre-hybrid.hgRzPI/DV8 Maker.app",
+    "active_converter_at_replacement": false
+  },
+  "artifacts": [
+    {
+      "path": "docs/evidence/2026-09-09-job-report-scenarios.json.gz",
+      "sha256": "b6dfa60bb442518ac9ad59d43e46739897c2b0ec752fe2ad3053d66106bfc9d5"
+    },
+    {
+      "path": "docs/evidence/2026-09-09-report-ui-hybrid.png",
+      "sha256": "aee095ac61eefd640b5fe4671272adb1ce53d5f307dc301677e918e4f7c0be17"
+    },
+    {
+      "path": "docs/evidence/2026-09-09-report-ui-checker.png",
+      "sha256": "05574e4c91e48e8b45c8a5ebd41ece682a9edde9cd867aef3c34753617e8141a"
+    }
+  ],
+  "source_identity": [
+    {
+      "path": "dv8_converter/src/report.rs",
+      "sha256": "8e142296f91c87b376d28f68718015da0089a13275ddebc2aef7ed7cb1d582d6"
+    },
+    {
+      "path": "dv8_converter/src/main.rs",
+      "sha256": "342403653bcb8aa0807b68e2ff55d093001bae974de97bcb85fd8eb0924a9411"
+    },
+    {
+      "path": "dv8_converter/src/logger.rs",
+      "sha256": "dee0a42cde8097acfc7bb560d5e0586b31e810930e8ce29b1bd77b126a8d40f7"
+    },
+    {
+      "path": "macapp/DV8Maker/AppModel.swift",
+      "sha256": "7628892b94e65dfda5b8e550da52b74b4b5dfc1979917df8592263f4c4cb8f0d"
+    },
+    {
+      "path": "macapp/DV8Maker/ProcessingExperience.swift",
+      "sha256": "209bcfda6b88d772f8e0c304b22a8988a01bf642644668b86f88cc0f7234f152"
+    },
+    {
+      "path": "scripts/test_job_report.py",
+      "sha256": "c8cc7400a6e1ed40accbc4fcecd37aa91d0501e3d6734bda1810d637ea09ce93"
+    },
+    {
+      "path": "macapp/Tests/AppModelAuditTests.swift",
+      "sha256": "945a0b86fc7f99339277b03c1336e6a8720df4d16bd3db7ee509399c59613aab"
+    }
+  ],
+  "limits": [
+    "Input identity is filesystem stat, not a content hash or complete concurrent-write protection.",
+    "A report write does not roll back an already converted movie; incomplete reports are not acceptance.",
+    "Current standard reports without explicit checks remain inconclusive.",
+    "No independent P5 color-reference acceptance, calibrated full-picture acceptance, or physical Dolby playback claim.",
+    "No private movie processed in this turn; synthetic fixture hashes differ across prepared platform sets.",
+    "Release gates remain two passed and seven pending."
+  ]
+}

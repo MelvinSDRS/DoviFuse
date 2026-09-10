@@ -1,4 +1,4 @@
-use crate::cli::HybridOptions;
+use crate::cli::{GradeCheckMode, HybridOptions};
 use crate::logger::Logger;
 use crate::mediainfo::{fps_from_info, HybridMediaInfo};
 
@@ -69,20 +69,9 @@ pub(crate) fn hybrid_preflight_checks(
     match (fps_from_info(dv_info), fps_from_info(hdr_info)) {
         (Some(dv_fps), Some(hdr_fps)) => {
             let diff = (dv_fps - hdr_fps).abs();
-            if diff > 0.5 {
-                logger.preflight_status(
-                    "FAIL",
-                    &format!("5. Frame rate match (diff {:.3} fps > 0.5 fps)", diff),
-                );
+            if diff > 0.001 {
+                logger.preflight_status("FAIL", "5. Frame rates differ; constant-offset alignment cannot verify retimed sources");
                 has_fail = true;
-            } else if diff > 0.01 {
-                logger.preflight_status(
-                    "WARN",
-                    &format!(
-                        "5. Frame rate slight mismatch (diff {:.3} fps > 0.01 fps)",
-                        diff
-                    ),
-                );
             } else {
                 logger.preflight_status("PASS", "5. Frame rate match");
             }
@@ -151,22 +140,24 @@ pub(crate) fn hybrid_preflight_checks(
     }
 
     match dv_profile {
-        Some(5) => logger.preflight_status(
-            "WARN",
-            "9. DV Profile 5 source detected - mode 3 will be used",
-        ),
-        Some(p) => logger.preflight_status("PASS", &format!("9. DV profile check (detected: {p})")),
+        Some(5) => {
+            logger.preflight_status("FAIL", "9. Profile 5 hybrid is disabled on main. Use a Profile 7 or 8 donor. Overrides cannot enable P5.");
+            has_fail = true;
+        }
+        Some(p @ (7 | 8)) => {
+            logger.preflight_status("PASS", &format!("9. DV profile check (detected: {p})"))
+        }
+        Some(p) => {
+            logger.preflight_status("FAIL", &format!("9. Unsupported DV profile {p}"));
+            has_fail = true;
+        }
         // An undetected profile would silently get mode 2; if the source is
         // actually P5 that skips the IPT-PQ-c2 conversion and produces a
         // broken P8-labelled output.
-        None if opts.force => logger.preflight_status(
-            "WARN",
-            "9. DV profile could not be detected - assuming P7/P8 (editor mode 2) due to --force",
-        ),
         None => {
             logger.preflight_status(
                 "FAIL",
-                "9. DV profile could not be detected - a P5 source would be converted incorrectly (re-run with --force to assume P7/P8)",
+                "9. DV profile could not be detected; refusing to guess an RPU conversion mode",
             );
             has_fail = true;
         }
@@ -206,6 +197,21 @@ pub(crate) fn hybrid_preflight_checks(
         logger.preflight_status("WARN", "13. Transfer characteristics are not PQ");
     }
 
+    if !crate::mediainfo::has_hdr10_base(hdr_info) {
+        logger.preflight_status(
+            "FAIL",
+            "HDR target must have a 10-bit BT.2020 PQ base layer",
+        );
+        has_fail = true;
+    }
+    if !opts.skip_grade_check
+        && opts.grade_check != GradeCheckMode::Metadata
+        && (dv_profile == Some(5) || !crate::mediainfo::has_hdr10_base(dv_info))
+    {
+        logger.preflight_status("FAIL", "Measured grade comparison requires a BT.2020 PQ source. Profile 5 hybrid is disabled on main.");
+        has_fail = true;
+    }
+
     let (verdict, msg) =
         static_grade_verdict(dv_info, hdr_info, opts.grade_check, opts.skip_grade_check);
     match verdict {
@@ -230,7 +236,12 @@ mod tests {
     use std::path::PathBuf;
 
     fn logger() -> Logger {
-        Logger::new(PathBuf::from("/dev/null"), false)
+        Logger::new(
+            PathBuf::from("/dev/null"),
+            false,
+            crate::cli::ProgressMode::Human,
+            15,
+        )
     }
 
     /// A DV/HDR pair that passes every check (profile passed separately).
@@ -265,10 +276,28 @@ mod tests {
     fn good_pair_with_known_profile_passes() {
         let (dv, hdr) = good_pair();
         let opts = HybridOptions::default();
-        assert!(!hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()));
-        assert!(!hybrid_preflight_checks(&dv, &hdr, Some(7), &opts, &logger()));
-        // P5 is a WARN (mode 3), not a failure.
-        assert!(!hybrid_preflight_checks(&dv, &hdr, Some(5), &opts, &logger()));
+        assert!(!hybrid_preflight_checks(
+            &dv,
+            &hdr,
+            Some(8),
+            &opts,
+            &logger()
+        ));
+        assert!(!hybrid_preflight_checks(
+            &dv,
+            &hdr,
+            Some(7),
+            &opts,
+            &logger()
+        ));
+        // Raw Profile 5 channels cannot be compared to HDR10 luma.
+        assert!(hybrid_preflight_checks(
+            &dv,
+            &hdr,
+            Some(5),
+            &opts,
+            &logger()
+        ));
     }
 
     #[test]
@@ -279,7 +308,7 @@ mod tests {
         let mut opts = HybridOptions::default();
         assert!(hybrid_preflight_checks(&dv, &hdr, None, &opts, &logger()));
         opts.force = true;
-        assert!(!hybrid_preflight_checks(&dv, &hdr, None, &opts, &logger()));
+        assert!(hybrid_preflight_checks(&dv, &hdr, None, &opts, &logger()));
     }
 
     #[test]
@@ -287,7 +316,56 @@ mod tests {
         let (dv, mut hdr) = good_pair();
         hdr.frame_count = 0;
         let opts = HybridOptions::default();
-        assert!(hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()));
+        assert!(hybrid_preflight_checks(
+            &dv,
+            &hdr,
+            Some(8),
+            &opts,
+            &logger()
+        ));
+    }
+
+    #[test]
+    fn invalid_hdr_bases_and_retimed_sources_fail_even_with_force() {
+        let (dv, hdr) = good_pair();
+        let opts = HybridOptions {
+            force: true,
+            skip_grade_check: true,
+            ..Default::default()
+        };
+        for bad in [
+            HybridMediaInfo {
+                bit_depth: Some(8),
+                ..hdr.clone()
+            },
+            HybridMediaInfo {
+                transfer_characteristics: "HLG".into(),
+                ..hdr.clone()
+            },
+            HybridMediaInfo {
+                colour_primaries: "BT.709".into(),
+                ..hdr.clone()
+            },
+            HybridMediaInfo {
+                frame_rate: Some(24.0),
+                ..hdr.clone()
+            },
+        ] {
+            assert!(hybrid_preflight_checks(
+                &dv,
+                &bad,
+                Some(8),
+                &opts,
+                &logger()
+            ));
+        }
+        assert!(hybrid_preflight_checks(
+            &dv,
+            &hdr,
+            Some(5),
+            &opts,
+            &logger()
+        ));
     }
 
     #[test]
@@ -295,6 +373,12 @@ mod tests {
         let (mut dv, hdr) = good_pair();
         dv.frame_rate_mode = "Variable".to_string();
         let opts = HybridOptions::default();
-        assert!(hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()));
+        assert!(hybrid_preflight_checks(
+            &dv,
+            &hdr,
+            Some(8),
+            &opts,
+            &logger()
+        ));
     }
 }

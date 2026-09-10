@@ -2,7 +2,15 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde_json::json;
+
+use crate::cli::ProgressMode;
 
 pub(crate) const RED: &str = "\x1b[0;31m";
 pub(crate) const GREEN: &str = "\x1b[0;32m";
@@ -15,8 +23,12 @@ const LOG_MAX_BYTES: u64 = 10 * 1024 * 1024;
 #[derive(Clone)]
 pub(crate) struct Logger {
     log_file: PathBuf,
+    report: Option<crate::report::Recorder>,
     debug: bool,
     utc_offset_secs: i64,
+    progress: ProgressMode,
+    phase_total: usize,
+    check_failures: Arc<AtomicUsize>,
 }
 
 /// Query the local UTC offset once at startup (e.g. "+0200" -> 7200).
@@ -50,11 +62,30 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 }
 
 impl Logger {
-    pub(crate) fn new(log_file: PathBuf, debug: bool) -> Self {
+    pub(crate) fn new(
+        log_file: PathBuf,
+        debug: bool,
+        progress: ProgressMode,
+        phase_total: usize,
+    ) -> Self {
         Self {
             log_file,
+            report: None,
             debug,
             utc_offset_secs: local_utc_offset_secs(),
+            progress,
+            phase_total,
+            check_failures: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    pub(crate) fn attach_report(&mut self, recorder: crate::report::Recorder) {
+        self.report = Some(recorder);
+    }
+
+    pub(crate) fn measurement(&self, key: &str, value: serde_json::Value) {
+        if let Some(report) = &self.report {
+            report.record(json!({"event":"measurement","key":key,"value":value}));
         }
     }
 
@@ -101,19 +132,127 @@ impl Logger {
     }
 
     pub(crate) fn step(&self, msg: &str) {
-        println!("\n{BLUE}=== {msg} ==={NC}\n");
+        if self.progress == ProgressMode::JsonLines {
+            let (index, label) = msg
+                .split_once(" | ")
+                .and_then(|(n, label)| n.parse::<usize>().ok().map(|n| (n, label)))
+                .unwrap_or((0, msg));
+            self.event(json!({"version":1,"event":"phase_started","index":index,"total":self.phase_total,"label":label}));
+        } else {
+            println!("\n{BLUE}=== {msg} ==={NC}\n");
+        }
     }
 
     pub(crate) fn ok(&self, msg: &str) {
-        println!("{GREEN}{msg}{NC}");
+        self.message("info", msg, GREEN);
     }
 
     pub(crate) fn warn(&self, msg: &str) {
-        println!("{YELLOW}{msg}{NC}");
+        if let Some(report) = &self.report {
+            report.record(json!({"level":"warning","text":msg}));
+        }
+        self.message("warning", msg, YELLOW);
     }
 
     pub(crate) fn err(&self, msg: &str) {
-        eprintln!("{RED}{msg}{NC}");
+        if self.progress == ProgressMode::JsonLines {
+            self.event(json!({"version":1,"event":"message","level":"error","text":msg}));
+        } else {
+            eprintln!("{RED}{msg}{NC}");
+        }
+    }
+
+    fn message(&self, level: &str, msg: &str, color: &str) {
+        if self.progress == ProgressMode::JsonLines {
+            self.event(json!({"version":1,"event":"message","level":level,"text":msg}));
+        } else {
+            println!("{color}{msg}{NC}");
+        }
+    }
+
+    fn event(&self, value: serde_json::Value) {
+        println!("{value}");
+    }
+
+    pub(crate) fn progress(&self, fraction: f64) {
+        if self.progress == ProgressMode::JsonLines {
+            self.event(
+                json!({"version":1,"event":"phase_progress","fraction":fraction.clamp(0.0, 1.0)}),
+            );
+        }
+    }
+
+    pub(crate) fn tool_output(&self, line: &str) {
+        let trimmed = line.trim();
+        if self.progress == ProgressMode::Human {
+            print!("{line}");
+            return;
+        }
+        if let Some(raw) = trimmed.strip_prefix("Progress:") {
+            if let Ok(percent) = raw.trim().trim_end_matches('%').parse::<f64>() {
+                self.progress(percent / 100.0);
+                return;
+            }
+        }
+        if trimmed == "progress=end" {
+            self.progress(1.0);
+        }
+        if self.progress == ProgressMode::JsonLines && self.debug && !trimmed.is_empty() {
+            self.event(json!({"version":1,"event":"message","level":"debug","text":trimmed}));
+        }
+    }
+
+    pub(crate) fn job_started(&self, mode: &str) {
+        if self.progress == ProgressMode::JsonLines {
+            self.event(
+                json!({"version":1,"event":"job_started","mode":mode,"total":self.phase_total}),
+            );
+        }
+    }
+
+    pub(crate) fn completed(&self, output: &PathBuf) {
+        if let Some(report) = &self.report {
+            report.record(json!({"version":1,"event":"completed","output":output}));
+            return;
+        }
+        if self.progress == ProgressMode::JsonLines {
+            self.event(json!({"version":1,"event":"completed","output":output}));
+        }
+    }
+
+    pub(crate) fn check_result(&self, key: &str, label: &str, status: &str, detail: &str) {
+        self.check_result_with_fix(key, label, status, detail, None, None);
+    }
+
+    pub(crate) fn check_result_with_fix(
+        &self,
+        key: &str,
+        label: &str,
+        status: &str,
+        detail: &str,
+        fix_action: Option<&str>,
+        fix_value: Option<i64>,
+    ) {
+        if let Some(report) = &self.report {
+            report.record(json!({"version":1,"event":"check_result","key":key,"label":label,"status":status,"detail":detail,"fix_action":fix_action,"fix_value":fix_value}));
+        }
+        if status == "fail" {
+            self.check_failures.fetch_add(1, Ordering::Relaxed);
+        }
+        if self.progress == ProgressMode::JsonLines {
+            self.event(json!({
+                "version": 1,
+                "event": "check_result",
+                "key": key,
+                "label": label,
+                "status": status,
+                "detail": detail,
+                "fix_action": fix_action,
+                "fix_value": fix_value
+            }));
+        } else {
+            self.preflight_status(&status.to_uppercase(), &format!("{label}: {detail}"));
+        }
     }
 
     pub(crate) fn preflight_status(&self, label: &str, msg: &str) {
@@ -123,5 +262,9 @@ impl Logger {
             "FAIL" => self.err(&format!("[FAIL] {msg}")),
             _ => println!("[{label}] {msg}"),
         }
+    }
+
+    pub(crate) fn check_failure_count(&self) -> usize {
+        self.check_failures.load(Ordering::Relaxed)
     }
 }

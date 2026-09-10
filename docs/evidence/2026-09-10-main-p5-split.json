@@ -1,0 +1,209 @@
+{
+  "date": "2026-09-10",
+  "purpose": "Separate experimental P5 development; main rejects all detected P5 hybrid donors",
+  "main_base": "4dcb1f7058279145d0f444652a24bb0e1547a741",
+  "p5_preserved_tree": "4b113ff78b6855834c3369a8993daea42961b58c",
+  "p5_branch": "codex/p5-workflow",
+  "linux": {
+    "rust_tests": 96,
+    "l5_example_tests": 4,
+    "clippy": "passed without warnings",
+    "real_tool_baseline_scenarios": 22,
+    "p5_disabled_controls": 8,
+    "launcher_p5_disabled_controls": 8,
+    "source_archive_reports_preservation_l5_wrapper": "passed",
+    "note": "Full script reached final diff check after all test stages passed; trailing blank lines were then corrected. MKVToolNix wrapper cleanup changes whitespace only."
+  },
+  "p5_branch_validation": {
+    "clean_git_archive_checkout": true,
+    "rust_tests": 108,
+    "color_acceptance": false
+  },
+  "mac": {
+    "build": "passed",
+    "bundled_baseline_scenarios": 22,
+    "p5_disabled_controls": 8,
+    "actual_app_report_replays": 26,
+    "app_state_negative_controls": "passed",
+    "source_archive_reports_preservation_l5": "passed",
+    "native_ui_rendering": "Hybrid, DV7 to DV8, Checker; no Analysis; archive settings retained",
+    "installed_smoke": "Installed bundle matches staged file inventory; P5 backend absent\nP5-disabled main controls passed: /var/folders/th/c7fh0bk97kd0mzv6yhg8nfbw0000gn/T/dv8-p5-disabled-qdop3rvf {\"default\": \"rejected; no output or source removal\", \"force\": \"rejected; no output or source removal\", \"skip-grade\": \"rejected; no output or source removal\", \"metadata\": \"rejected; no output or source removal\", \"force-skip\": \"rejected; no output or source removal\", \"dry-run\": \"rejected; no output or source removal\", \"--analyze-pair\": \"not available on main\", \"--probe-color-backend\": \"not available on main\"}\nStandard source/archive controls passed: /var/folders/th/c7fh0bk97kd0mzv6yhg8nfbw0000gn/T/dv8-standard-source-toen_awv {\"mel\": {\"type\": \"MEL\", \"archive_payload_sha256\": \"3f6c563fdbb7a7d52f3b1f00319f60be19e5d60c05d915cf22cbaab2139da6cf\", \"validation\": \"warn\"}, \"fel\": {\"type\": \"FEL\", \"archive_payload_sha256\": \"dd2c84fff1fbb8fd4d2fd07972ae4f32675d68b5bb3007725b47919ea10389fb\", \"validation\": \"warn\"}, \"mixed\": {\"type\": \"MEL/FEL\", \"archive_payload_sha256\": \"42001f87ee6e6e0631f660fecf76104f3f0da6716bc352ad55689a824c3371c1\", \"validation\": \"warn\"}}\n90336 /Users/melvinsiadous/Applications/DV8 Maker.app/Contents/MacOS/DV8 Maker\nArchived 26 app report replay traces\n",
+    "installed_converter_sha256": "7e675a3675289a1cf7229d1bc5e6c006055fa55d733a728cf2b080341398a819",
+    "install_log": "/Users/melvinsiadous/Applications/DV8 Maker.app: replacing existing signature\n90336 /Users/melvinsiadous/Applications/DV8 Maker.app/Contents/MacOS/DV8 Maker\n7e675a3675289a1cf7229d1bc5e6c006055fa55d733a728cf2b080341398a819  /Users/melvinsiadous/Applications/DV8 Maker.app/Contents/Resources/tools/dv8_converter\n176e05d0e1e1827ba34f387bf08f3137df58d049a4248c1d6bc773d852ddfe16  /Users/melvinsiadous/Applications/DV8 Maker.app/Contents/MacOS/DV8 Maker\nRollback: /Users/melvinsiadous/Library/Application Support/DV8 Maker/Rollbacks/main-clean-replacement.SASNkq\n",
+    "wrapper_whitespace_log": "/tmp/DV8-build/dist/DV8 Maker.app: replacing existing signature\n/Users/melvinsiadous/Applications/DV8 Maker.app: replacing existing signature\nOnly trailing blank lines removed from MKVToolNix wrappers; both bundle signatures verified\n"
+  },
+  "replay_evidence": {
+    "path": "docs/evidence/2026-09-10-main-app-report-replay.json.gz",
+    "sha256": "6569cb3d9cc876bed1e167461457b6ba4844e3af63f6f9197bebd09d0bc1f874",
+    "cases": [
+      {
+        "name": "checker-valid",
+        "exit_status": 0
+      },
+      {
+        "name": "checker-missing-dv",
+        "exit_status": 1
+      },
+      {
+        "name": "hybrid-default",
+        "exit_status": 0
+      },
+      {
+        "name": "checker-hybrid",
+        "exit_status": 0
+      },
+      {
+        "name": "existing-output-rejected",
+        "exit_status": 1
+      },
+      {
+        "name": "hybrid-full-grade",
+        "exit_status": 0
+      },
+      {
+        "name": "identical-inputs",
+        "exit_status": 1
+      },
+      {
+        "name": "checker-offset",
+        "exit_status": 1
+      },
+      {
+        "name": "repair-stale-offset",
+        "exit_status": 1
+      },
+      {
+        "name": "repair-offset",
+        "exit_status": 0
+      },
+      {
+        "name": "checker-repaired",
+        "exit_status": 0
+      },
+      {
+        "name": "uppercase-in-place",
+        "exit_status": 0
+      },
+      {
+        "name": "archive-collision",
+        "exit_status": 1
+      },
+      {
+        "name": "standard-dry-collision",
+        "exit_status": 1
+      },
+      {
+        "name": "standard-p7",
+        "exit_status": 0
+      },
+      {
+        "name": "checker-standard",
+        "exit_status": 0
+      },
+      {
+        "name": "mixed-directory",
+        "exit_status": 0
+      },
+      {
+        "name": "multi-video-rejected",
+        "exit_status": 1
+      },
+      {
+        "name": "empty-check",
+        "exit_status": 1
+      },
+      {
+        "name": "truncated-input",
+        "exit_status": 1
+      },
+      {
+        "name": "p5-disabled-default",
+        "exit_status": 1
+      },
+      {
+        "name": "p5-disabled-force",
+        "exit_status": 1
+      },
+      {
+        "name": "p5-disabled-skip-grade",
+        "exit_status": 1
+      },
+      {
+        "name": "p5-disabled-metadata",
+        "exit_status": 1
+      },
+      {
+        "name": "p5-disabled-force-skip",
+        "exit_status": 1
+      },
+      {
+        "name": "p5-disabled-dry-run",
+        "exit_status": 1
+      }
+    ]
+  },
+  "logs_sha256": {
+    "linux-full.log": "e5704967b6608d63ab146d246bc7f974879d204c4edad6fda11aeeb13b23aaf5",
+    "clippy.log": "bbf70759d56ca278535805c35f033c8fc523a01e449521eb3fad9e859e23ece7",
+    "launcher-tests.log": "8857324d82e61b337cffd8bb5e957ee69f669ff01922fc498d28d2a1f5e80002",
+    "p5-branch-tests.log": "411b6c2f33bf9fb528c4f510feee5a149dcf896ef26b47476b126d685a56aded",
+    "main-split-build.log": "35dde50f7b193808aafa0fde09bcb271b149b8c009d7881e652e257820e79fb9",
+    "main-split-bundle.log": "e9d440102641b3e1925bb1a0350294f699de366eab44943fdf9cb13e55e72afc",
+    "installed-final.log": "fb2bcd044b1597afae399f6bf8eee2f90996dea30c1eb618f1e751f478af3070"
+  },
+  "tested_sources_sha256": {
+    "dv8_converter/src/cancellation.rs": "e78a4c31734912e5e13b857919cd1376f090329b7a42c78feefc89cee6a43237",
+    "dv8_converter/src/checker.rs": "b094e731ae61375a46924e892ccc9d413913450ec102f3a7cf0fcdd0795b6e72",
+    "dv8_converter/src/cli.rs": "1c05bbc0befa569919504e751a5441ed0e2aed19cd7e2a67077b876473d13c01",
+    "dv8_converter/src/enhancement.rs": "2d8a902a38abada56aff3dfde9ec78d769ac459722f7b0a377c8b06271d5f694",
+    "dv8_converter/src/exec.rs": "2ee43b98ab837757d344420ec0cc30898b87343b2e1a0146a74a10f8f7494dea",
+    "dv8_converter/src/ffmpeg.rs": "379d45718a412b3dc18c0e996de4492b03bf8862c35e31dff718adf06b19c014",
+    "dv8_converter/src/fsutil.rs": "f0cfa389b757ff47ba5133f7ca940b6fdae4850f4f4911019e7f1fcddcbc679d",
+    "dv8_converter/src/hybrid/active_area.rs": "46ada34db7d35e27104577fd7a25315e6025528db6ead00b4e56cdb487412b14",
+    "dv8_converter/src/hybrid/align.rs": "e884afb31e083ff0210ae05627fc4d0b2d658a27901947a734defc25a7b2ab84",
+    "dv8_converter/src/hybrid/editor.rs": "28c76cffd4b52375aaeb33fd2007667492bb518245562519b684e4ed9c946e9a",
+    "dv8_converter/src/hybrid/grade.rs": "ac5669800e791822c13933be943b22ce50a6f8dd49de37262c511a48523d4b5d",
+    "dv8_converter/src/hybrid/l5.rs": "95994ca152f1ef1ac228b200fdfa586ab0d61beeb984aec934c8599ca4142cd6",
+    "dv8_converter/src/hybrid/letterbox.rs": "4d8d7ba3799d53e0341dd1049b6b8b1deb8d1744b07ec7d2af743f25cbe7b578",
+    "dv8_converter/src/hybrid/mod.rs": "9c58e0279c81cb53ddf8aeb2976a3520af0fb356cefe878c8c40128472e8ac31",
+    "dv8_converter/src/hybrid/preflight.rs": "95bb3212d8cc53f1eaed871e568cf9fc90c7300cebea013678821e425eed5476",
+    "dv8_converter/src/hybrid/scenes.rs": "f2578494ec77701ff5a478f0084fd03e750ec7ee8c4fc35c0f67a9b57695b10b",
+    "dv8_converter/src/hybrid/validate.rs": "12fd1c3e468f3f99051f7b7988b18e9ab35f34df7466999435716791b3fd02ae",
+    "dv8_converter/src/logger.rs": "4a85fa1900526da2d2acc0881b6ed7f6cce56d2b32dc2274d48f336ff08b8b6c",
+    "dv8_converter/src/main.rs": "f40573f088cac03996bf8b969ed3fd04b2835b29f3428b066592691c63361341",
+    "dv8_converter/src/mediainfo.rs": "1ebdf03b0460f94174f3319c4dc80f11f225ee87ff486c02d22e7007b5dd5dfb",
+    "dv8_converter/src/pq.rs": "66f2e57ebdcd0cf68c89d68502f4a76e45db54901207b4173215d53257a59bc1",
+    "dv8_converter/src/remux.rs": "cc0b12527be39b39f001315a58dc83090a53eb6fa791f51c0744863937ece00b",
+    "dv8_converter/src/report.rs": "5b59eca3c5a82deb7e34a65d41db701d99ae1bf69459901a0aea1a13a5d95d39",
+    "dv8_converter/src/runtime.rs": "120b87f5b635badebe7edde342b61eb1e43865b6f938c250f4b5d542118759e8",
+    "dv8_converter/src/standard.rs": "4987757881b37517941cd21f3db307babb10edf3251da0285632af87609f47f5",
+    "macapp/DV8Maker/AppModel.swift": "c3198ebb1823b0c0317ac516b1f818ac4fcdffc0cdd9c06727e20dd3fd699453",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png": "b1848f3eb83cfa73ae3d10a57f2e964b13fc65a71461da811909a9c630247816",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-128.png": "ce0e3432518e79345a0d288ec644944422b9aefa177201f5ac50973a3690a730",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-16.png": "0f6f3623b6fa0e87121c55bcf4391a6c39f33ca214422fbf0a6005cfad7a9064",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png": "0f95b1e49efac1426d0c4e471c8208489b59ff3ad276c70b182fe09511e47da9",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-32.png": "51a19b4c63fa739715c601f8a82ad0079db3b23233efd14d807aa7b1a6db1277",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-512.png": "0e6a270e8581444058761aeaa866f5c2920ec406f1a8f364e6934799301fa7c7",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/AppIcon-64.png": "2229727a18bb9167a028dc9c026e47d0b70bb22441329f78131dc30e0beb68d6",
+    "macapp/DV8Maker/Assets.xcassets/AppIcon.appiconset/Contents.json": "203a921d0dd3bb49c7afe503f7ddb30ce844a6f69dfae0b3cfcef52878bc007d",
+    "macapp/DV8Maker/Assets.xcassets/Contents.json": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b",
+    "macapp/DV8Maker/ContentView.swift": "193b11e6b5ebf74a22658a839233b7af628aa904b91abce2a4c971f1a2dddc85",
+    "macapp/DV8Maker/DV8MakerApp.swift": "7b3bc9de143e27673248f7de8472e32abcef08d2181ffbf7ac8a1ffe1b9ca5f7",
+    "macapp/DV8Maker/OrganicProcessingField.swift": "ebfd9d0e332b9fe776879c934357f7cd6656db05175b03b41607ecf92cfb7576",
+    "macapp/DV8Maker/ProcessingExperience.swift": "209bcfda6b88d772f8e0c304b22a8988a01bf642644668b86f88cc0f7234f152",
+    "macapp/DV8Maker/ProcessingMotion.swift": "2d0ea7e70622e2b93590edd276cead75521a1320bc2046e702ee0afacaeb4b70",
+    "macapp/DV8Maker/ProcessingPreviews.swift": "0e57b195768adf1ebbfea4a335084748d8f07779e49cff2584793373d9f1af03",
+    "macapp/DV8Maker/ProcessingRibbons.swift": "b45cc3d2a9140aa70e96d5ced57799d820bbfc69b370699794733f6251c22dac",
+    "macapp/DV8Maker/ScratchCapacity.swift": "5a1220146c71d1fbcd71ccaca68548e70b0119148619096ecd60139a40aadcfa",
+    "macapp/DV8Maker/SettingsView.swift": "89421afe511315b81ec3081cd7aa9d234fdd2035b4bbde85b98354b9e189df0a",
+    "macapp/Tests/AppModelAuditTests.swift": "dc47e43375229734cd70fe6fa95d2261d4730568f14f348fb29ed56281867ca3",
+    "macapp/Tests/ProcessingMotionTests.swift": "813f0e655286313e2c40628db8f476e9434e3f801984dd5a4c2c23f3d35e30ca",
+    "macapp/Tests/ProcessingRibbonRenderingTests.swift": "46c17d7add67aa9e13474020fde3f1516e85aa28c8fac377ce99d69a17cd29b1",
+    "macapp/Tests/WorkflowRenderingTests.swift": "e57c49a65ded2de3f4f9ecbf377589ae74de2a27e4c3be79bec78f8011461a24"
+  },
+  "limits": [
+    "Synthetic mechanics fixtures only; no private movie used this turn.",
+    "No Dolby playback or full-length performance acceptance claimed.",
+    "No remote push or publication."
+  ]
+}

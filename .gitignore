@@ -8,3 +8,12 @@ logs/jobs/
 tools/
 dovi_tool/
 dv8_converter/target/
+.macos-build-cache/
+dist/
+AGENTS.md
+CLAUDE.md
+
+.verification/
+
+__pycache__/
+*.py[cod]

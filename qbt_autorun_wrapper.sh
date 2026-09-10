@@ -420,7 +420,7 @@ write_index "Accepted target=$TARGET job_log=$JOB_LOG max_parallel=$MAX_PARALLEL
     repoint_hardlinks_from_snapshot "$SNAPSHOT_FILE" "$CONVERSION_MAP_FILE"
   fi
 
-  if [[ "$converted" == "true" && "$QBT_REMOVE_CONVERTED" == "true" && "$DRY_RUN_FLAG" != "true" ]]; then
+  if [[ "$rc" -eq 0 && "$converted" == "true" && "$QBT_REMOVE_CONVERTED" == "true" && "$DRY_RUN_FLAG" != "true" ]]; then
     hash="$(qbt_find_hash_by_target "$TARGET")"
     if qbt_stop_and_remove_torrent "$hash"; then
       echo "$(now) - Converted DV7: torrent stopped+removed (files kept), hash=$hash"

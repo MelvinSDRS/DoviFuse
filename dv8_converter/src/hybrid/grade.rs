@@ -109,12 +109,12 @@ pub(crate) fn static_grade_verdict(
     if let (Some(d), Some(h)) = (dv.mastering_max_nits, hdr.mastering_max_nits) {
         if rel_diff(d, h) > 0.05 {
             let msg = format!(
-                "Mastering display max luminance differs: {d:.0} vs {h:.0} nits - sources are different grades (e.g. 4000 vs 1000 nit trim)"
+                "Mastering display max luminance differs: {d:.0} vs {h:.0} nits - this is a compatibility warning, not proof of a different grade"
             );
-            return if skip {
-                (Verdict::Warn, format!("{msg} [--skip-grade-check]"))
-            } else {
+            return if metadata_only {
                 (Verdict::Fail, msg)
+            } else {
+                (Verdict::Warn, format!("{msg}{unverified_suffix}"))
             };
         }
     }
@@ -342,7 +342,11 @@ pub(crate) fn run_grade_check(
             let chunk_len = (n / chunks).max(1);
             for c in 0..chunks {
                 let lo = c * chunk_len;
-                let hi = ((c + 1) * chunk_len).min(n);
+                let hi = if c + 1 == chunks {
+                    n
+                } else {
+                    ((c + 1) * chunk_len).min(n)
+                };
                 if hi <= lo {
                     break;
                 }
@@ -412,7 +416,9 @@ pub(crate) fn run_grade_check(
         p99_dv_nits.max(p99_hdr_nits) / lo
     };
 
-    let pass = windows_bad <= MAX_BAD_WINDOWS && peak_ratio <= PEAK_RATIO_FAIL;
+    let pass = windows_bad < windows_measured
+        && windows_bad <= MAX_BAD_WINDOWS
+        && peak_ratio <= PEAK_RATIO_FAIL;
 
     Ok(GradeOutcome {
         windows_measured,
@@ -453,11 +459,11 @@ mod tests {
     }
 
     #[test]
-    fn static_gate_wrong_trim_fails() {
+    fn static_gate_mastering_display_difference_requires_measurement() {
         let dv = info(Some(4000), Some(400), Some(0.005), Some(4000.0));
         let hdr = info(Some(1000), Some(400), Some(0.005), Some(1000.0));
         let (v, msg) = static_grade_verdict(&dv, &hdr, M::Sampled, false);
-        assert_eq!(v, Verdict::Fail, "{msg}");
+        assert_eq!(v, Verdict::Warn, "{msg}");
         // --skip-grade-check demotes to WARN
         let (v, _) = static_grade_verdict(&dv, &hdr, M::Sampled, true);
         assert_eq!(v, Verdict::Warn);

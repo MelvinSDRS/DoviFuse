@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "scope": "Remux preservation for the supported single-video Matroska paths; synthetic independently authored container contents. Not P5 reconstruction or creative-grade acceptance.",
+  "tests": {
+    "linux": {
+      "standard": {
+        "metadata": "preserved",
+        "audio_subtitles_attachments_sha256": "matched",
+        "base_layer_vcl": {
+          "count": 259,
+          "sha256": "6b73bc6b8d29a73e50c897095bcabc2037da12900a1d13c96c1c1d04e3fb5dfc"
+        },
+        "chapters_xml": "matched",
+        "track_timestamps": "within 1ms",
+        "tracks": 3
+      },
+      "hybrid": {
+        "metadata": "preserved",
+        "audio_subtitles_attachments_sha256": "matched",
+        "base_layer_vcl": {
+          "count": 1090,
+          "sha256": "7f527c805747a72b3dc8b868bcb4e97eefdf0d9eff9d50050f3571b6f70ae56c"
+        },
+        "chapters_xml": "matched",
+        "track_timestamps": "within 1ms",
+        "tracks": 3
+      },
+      "standard-lost-header": "rejected; sources preserved",
+      "hybrid-lost-header": "rejected; sources preserved"
+    },
+    "macos_bundle": {
+      "standard": {
+        "metadata": "preserved",
+        "audio_subtitles_attachments_sha256": "matched",
+        "base_layer_vcl": {
+          "count": 259,
+          "sha256": "6b73bc6b8d29a73e50c897095bcabc2037da12900a1d13c96c1c1d04e3fb5dfc"
+        },
+        "chapters_xml": "matched",
+        "track_timestamps": "within 1ms",
+        "tracks": 3
+      },
+      "hybrid": {
+        "metadata": "preserved",
+        "audio_subtitles_attachments_sha256": "matched",
+        "base_layer_vcl": {
+          "count": 1090,
+          "sha256": "7f527c805747a72b3dc8b868bcb4e97eefdf0d9eff9d50050f3571b6f70ae56c"
+        },
+        "chapters_xml": "matched",
+        "track_timestamps": "within 1ms",
+        "tracks": 3
+      },
+      "standard-lost-header": "rejected; sources preserved",
+      "hybrid-lost-header": "rejected; sources preserved"
+    }
+  },
+  "independent_expectations": [
+    "PCM waveform samples authored in Python",
+    "UTF-8 subtitle text authored independently",
+    "Binary attachment with explicit expected SHA-256",
+    "Two chapters with explicit UIDs and titles",
+    "Audio/video/subtitle order with video second",
+    "French Canadian video language, name, flags, display size and stereo value",
+    "Extracted original base-layer VCL NAL SHA-256; enhancement layer and RPU excluded by design",
+    "Extracted chapter XML and per-track timestamps before/after"
+  ],
+  "unicode": {
+    "cross_platform_fixture": "Synthetic standard P7 authored on Linux then converted with Mac bundled tools",
+    "before_fix": "NFC to NFD accent decomposition caused conservative remux refusal; source retained",
+    "after_fix": "Canonical Unicode name comparison passed; Rust controls reject removed accents, changed case, whitespace and different names"
+  },
+  "negative_controls": [
+    "Standard remux header loss rejects before source replacement",
+    "Hybrid remux header loss rejects even with --delete-sources; both sources retained and FAILED output available"
+  ],
+  "automated_validation": {
+    "rust_tests": 91,
+    "scanner_example_tests": 9,
+    "scanner_process_controls": 17,
+    "real_tool_baseline_linux_and_macos": 22,
+    "color_backend_controls_macos": 13,
+    "release_gate_controls": 7,
+    "clippy": "passed, warnings denied",
+    "swift_app_state": "passed",
+    "wrapper": "passed"
+  },
+  "tested_macos_converter_sha256": "2272d3da1d8f055ddd61eafdd1467871a198305095a863cefc4c660e592c487a",
+  "macos_gate_log_sha256": "b5e5d4528753ef9ea4af1f33f99e4b986191dc7163fbd8fc1d45921f6aa3a730",
+  "linux_gate_log_sha256": "6e1421177c168590742080edb33c92774c811c0ef5e9af605b394759ab099cb2",
+  "limitations": [
+    "Runtime guard verifies selected container headers, attachment metadata and chapter counts, not extracted payload hashes on every user conversion. Independent tests perform payload comparisons.",
+    "Synthetic regression uses PCM audio and SRT subtitles, not an exhaustive inventory of every Matroska codec or metadata extension.",
+    "Non-pixel display units and unsupported stereo metadata fail conservatively.",
+    "No hosted CI run, published release or Dolby-display QC."
+  ],
+  "final_packaging": {
+    "macos_gate_log_sha256": "b38a885ddcc31448321d5f884ab2126655200804b0822fd5ca89ff0e811f00f1",
+    "rust_license_packages": 24,
+    "rust_license_manifest_sha256": "4e8ac91a72188d7cc38899bfc135b3c7f1fe856f3d701a5f99836d8131642691",
+    "converter_bytes_unchanged": true,
+    "macos_bundle_suite": "passed again after notice packaging"
+  }
+}
