@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -67,13 +66,8 @@ fn resolve_executable_tool_with(candidates: &[PathBuf], version_flag: &str) -> O
             continue;
         }
 
-        if let Ok(status) = Command::new(c)
-            .arg(version_flag)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-        {
-            if status.success() {
+        if let Ok(status) = crate::exec::probe(c, version_flag) {
+            if status.status.success() {
                 return Some(c.clone());
             }
         }

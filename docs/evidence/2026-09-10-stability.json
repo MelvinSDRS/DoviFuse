@@ -1,0 +1,297 @@
+{
+  "date": "2026-09-10",
+  "scope": "Supported workflows only; P5 stays disabled",
+  "baseline_commit": "71739e599efe57905719237046b710a0175a00ef",
+  "baseline": {
+    "linux_suite": "passed (96 Rust tests + 4 L5 example tests and existing integrations)",
+    "mac_suite": "passed (22 real-tool baseline scenarios, 26 app replays and other existing controls)",
+    "reproduced_process_failures": [
+      {
+        "case": "cancel-capture-descendants",
+        "failure": "did not finish within 10 seconds"
+      },
+      {
+        "case": "cancel-status-descendants",
+        "failure": "did not finish within 10 seconds"
+      },
+      {
+        "case": "cancel-version-probe",
+        "failure": "did not finish within 10 seconds"
+      },
+      {
+        "case": "leader-exit-pipe-held",
+        "failure": "did not finish within 10 seconds"
+      }
+    ],
+    "linux_binary_sha256": "b320868af9b9fd0fbc6a77a21edcf120389b755bec983000d6c43b59e952fa17",
+    "mac_binary_sha256": "7e675a3675289a1cf7229d1bc5e6c006055fa55d733a728cf2b080341398a819"
+  },
+  "candidate": {
+    "linux_suite": "passed",
+    "rust_tests": 98,
+    "l5_example_tests": 4,
+    "clippy": "passed without warnings",
+    "mac_build": "BUILD SUCCEEDED; signature verified",
+    "mac_suite": "passed",
+    "actual_app_report_replays": 43,
+    "linux_faults": {
+      "kind": "synthetic-fault-injection",
+      "binary_sha256": "8c5cecd429de0aeb0c268c7e4330f865cce7aaba59034ab093115b6357e1c6de",
+      "cases": [
+        {
+          "case": "cancel-capture-descendants",
+          "failure_or_cancellation_seconds": 0.065,
+          "status": "passed"
+        },
+        {
+          "case": "cancel-status-descendants",
+          "failure_or_cancellation_seconds": 0.065,
+          "status": "passed"
+        },
+        {
+          "case": "cancel-version-probe",
+          "failure_or_cancellation_seconds": 0.033,
+          "status": "passed"
+        },
+        {
+          "case": "simultaneous-output-reservation",
+          "failure_or_cancellation_seconds": 0.622,
+          "status": "passed"
+        },
+        {
+          "case": "crash-restart-refuses-stale-output",
+          "status": "passed",
+          "recovery": "Interrupted report and owned temporary files retained; restart refused"
+        },
+        {
+          "case": "leader-exit-pipe-held",
+          "failure_or_cancellation_seconds": 2.021,
+          "status": "passed"
+        },
+        {
+          "case": "extraction-io-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "conversion-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "remux-disk-full",
+          "failure_or_cancellation_seconds": 0.032,
+          "status": "passed"
+        },
+        {
+          "case": "decode-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "scratch-disappeared",
+          "failure_or_cancellation_seconds": 0.063,
+          "status": "passed"
+        },
+        {
+          "case": "archive-disappeared",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "replacement-readonly",
+          "failure_or_cancellation_seconds": 0.164,
+          "status": "passed"
+        },
+        {
+          "case": "report-replaced-after-validation",
+          "failure_or_cancellation_seconds": 0.164,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-edit-error",
+          "failure_or_cancellation_seconds": 0.015,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-injection-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-remux-io-error",
+          "failure_or_cancellation_seconds": 0.015,
+          "status": "passed"
+        },
+        {
+          "case": "checker-decode-error",
+          "failure_or_cancellation_seconds": 0.003,
+          "status": "passed"
+        },
+        {
+          "case": "repair-injection-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        }
+      ],
+      "limits": [
+        "ENOSPC/EIO are tool-boundary injections, not a real disconnected NAS.",
+        "No power-loss or uninterruptible kernel I/O guarantee."
+      ]
+    },
+    "mac_faults": {
+      "kind": "synthetic-fault-injection",
+      "binary_sha256": "05da0041976465218a8ca81369835abdbfe60449ee2be8ac98090f58d12591f8",
+      "cases": [
+        {
+          "case": "cancel-capture-descendants",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "cancel-status-descendants",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "cancel-version-probe",
+          "failure_or_cancellation_seconds": 0.089,
+          "status": "passed"
+        },
+        {
+          "case": "simultaneous-output-reservation",
+          "failure_or_cancellation_seconds": 0.638,
+          "status": "passed"
+        },
+        {
+          "case": "crash-restart-refuses-stale-output",
+          "status": "passed",
+          "recovery": "Interrupted report and owned temporary files retained; restart refused"
+        },
+        {
+          "case": "leader-exit-pipe-held",
+          "failure_or_cancellation_seconds": 2.076,
+          "status": "passed"
+        },
+        {
+          "case": "extraction-io-error",
+          "failure_or_cancellation_seconds": 0.011,
+          "status": "passed"
+        },
+        {
+          "case": "conversion-error",
+          "failure_or_cancellation_seconds": 0.005,
+          "status": "passed"
+        },
+        {
+          "case": "remux-disk-full",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "decode-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "scratch-disappeared",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "archive-disappeared",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "replacement-readonly",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "report-replaced-after-validation",
+          "failure_or_cancellation_seconds": 0.002,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-edit-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-injection-error",
+          "failure_or_cancellation_seconds": 0.011,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-remux-io-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "checker-decode-error",
+          "failure_or_cancellation_seconds": 0.011,
+          "status": "passed"
+        },
+        {
+          "case": "repair-injection-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        }
+      ],
+      "limits": [
+        "ENOSPC/EIO are tool-boundary injections, not a real disconnected NAS.",
+        "No power-loss or uninterruptible kernel I/O guarantee."
+      ]
+    },
+    "mac_binary_sha256": "05da0041976465218a8ca81369835abdbfe60449ee2be8ac98090f58d12591f8"
+  },
+  "observed_limits": [
+    "Synthetic fixtures validate mechanics, not creative grade equivalence.",
+    "ENOSPC/EIO are tool-boundary injections; no production NAS was disconnected.",
+    "Forced-kill restart preserves incomplete artifacts and refuses automatic reuse; supervisor cleans up test descendants.",
+    "Full-length and playback acceptance remain pending."
+  ],
+  "tested_sources_sha256": {
+    "dv8_converter/Cargo.lock": "9ec35033a93c4253ec04b8e68a7cd3914cc8e7dfa00b7b9c41f8b9d7f2abaf73",
+    "dv8_converter/Cargo.toml": "d090d2345a6b1fdea188a7e5efc186128260ab600b5fd626bcce943375148731",
+    "dv8_converter/src/cancellation.rs": "e78a4c31734912e5e13b857919cd1376f090329b7a42c78feefc89cee6a43237",
+    "dv8_converter/src/checker.rs": "b094e731ae61375a46924e892ccc9d413913450ec102f3a7cf0fcdd0795b6e72",
+    "dv8_converter/src/cli.rs": "1c05bbc0befa569919504e751a5441ed0e2aed19cd7e2a67077b876473d13c01",
+    "dv8_converter/src/enhancement.rs": "2d8a902a38abada56aff3dfde9ec78d769ac459722f7b0a377c8b06271d5f694",
+    "dv8_converter/src/exec.rs": "14880f97024afbebd193c5f04d8560bd01563fdbe50f2de4e541ced38a9f6a50",
+    "dv8_converter/src/ffmpeg.rs": "379d45718a412b3dc18c0e996de4492b03bf8862c35e31dff718adf06b19c014",
+    "dv8_converter/src/fsutil.rs": "f0cfa389b757ff47ba5133f7ca940b6fdae4850f4f4911019e7f1fcddcbc679d",
+    "dv8_converter/src/hybrid/active_area.rs": "46ada34db7d35e27104577fd7a25315e6025528db6ead00b4e56cdb487412b14",
+    "dv8_converter/src/hybrid/align.rs": "e884afb31e083ff0210ae05627fc4d0b2d658a27901947a734defc25a7b2ab84",
+    "dv8_converter/src/hybrid/editor.rs": "28c76cffd4b52375aaeb33fd2007667492bb518245562519b684e4ed9c946e9a",
+    "dv8_converter/src/hybrid/grade.rs": "ac5669800e791822c13933be943b22ce50a6f8dd49de37262c511a48523d4b5d",
+    "dv8_converter/src/hybrid/l5.rs": "95994ca152f1ef1ac228b200fdfa586ab0d61beeb984aec934c8599ca4142cd6",
+    "dv8_converter/src/hybrid/letterbox.rs": "4d8d7ba3799d53e0341dd1049b6b8b1deb8d1744b07ec7d2af743f25cbe7b578",
+    "dv8_converter/src/hybrid/mod.rs": "9c58e0279c81cb53ddf8aeb2976a3520af0fb356cefe878c8c40128472e8ac31",
+    "dv8_converter/src/hybrid/preflight.rs": "95bb3212d8cc53f1eaed871e568cf9fc90c7300cebea013678821e425eed5476",
+    "dv8_converter/src/hybrid/scenes.rs": "f2578494ec77701ff5a478f0084fd03e750ec7ee8c4fc35c0f67a9b57695b10b",
+    "dv8_converter/src/hybrid/validate.rs": "12fd1c3e468f3f99051f7b7988b18e9ab35f34df7466999435716791b3fd02ae",
+    "dv8_converter/src/logger.rs": "4a85fa1900526da2d2acc0881b6ed7f6cce56d2b32dc2274d48f336ff08b8b6c",
+    "dv8_converter/src/main.rs": "f40573f088cac03996bf8b969ed3fd04b2835b29f3428b066592691c63361341",
+    "dv8_converter/src/mediainfo.rs": "1ebdf03b0460f94174f3319c4dc80f11f225ee87ff486c02d22e7007b5dd5dfb",
+    "dv8_converter/src/pq.rs": "66f2e57ebdcd0cf68c89d68502f4a76e45db54901207b4173215d53257a59bc1",
+    "dv8_converter/src/remux.rs": "cc0b12527be39b39f001315a58dc83090a53eb6fa791f51c0744863937ece00b",
+    "dv8_converter/src/report.rs": "3720943915ac61c16bc38d96bfefa0632ad594f5a4606bf468efcc5f0785564d",
+    "dv8_converter/src/runtime.rs": "5ac62d6ebf4f17a4af22962a1f41d72a5682fb9afb2ed33069290c9472fbfaa8",
+    "dv8_converter/src/standard.rs": "4987757881b37517941cd21f3db307babb10edf3251da0285632af87609f47f5",
+    "macapp/Tests/AppModelAuditTests.swift": "e8ae18ca560c421a6fb812497ff57859dcb180d8735a180659ed0d33109826ce",
+    "scripts/audit_fault_tool.py": "7524c904d2bf3293a9ec038fd4c5b9063bf8873cb106d901ec259f59a0c8a47f",
+    "scripts/audit_faults.py": "006f389571d6d6d1d30cee91fa4762ad005e94294356a042f2923bf4bdc3eb2c",
+    "scripts/stability_measure.py": "57e4f7203694cc1c7717032c551f17bdf53bec3c6204ac52236f54d18b3623ba",
+    "scripts/test-linux.sh": "8abd85cc9c39b97da329df8de6ff0a9076f931f4216f937fcc9bf39f5f19a237",
+    "scripts/test-macos-bundle.sh": "235a1c9690c579d616e68278f5ec212c81bc5bd4a1e5bc508a6fec01f754165e"
+  },
+  "local_log_sha256": {
+    "dv8-stability-linux-final.log": "44efce8ff82325e438da1fd3da2427ea21a7da62af5949dc07abd074d5de4f38",
+    "linux.log": "ba79e822f1c930b0714dff8ddaaf2890edd45746c0114a58cdd4028d6b993228",
+    "mac-baseline.log": "8dbc5749dce538e8ea55b1a53eb1e5bb2a7d9baf69c8a555242da9c6cc86b557",
+    "mac-build.log": "dd6c54e2650ebd77b1fb730a91f3a1f9bfad6d78599fee01105e90ea226f4ac5",
+    "mac-candidate.log": "f02cb406ecccd5df6ca0d456838f33913b94b5da4c28ad577357e4d0240b148b"
+  }
+}

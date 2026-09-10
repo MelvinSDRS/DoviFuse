@@ -59,6 +59,9 @@ jobs:
             /tmp/dv8-report-controls-*/*.json
             /tmp/dv8-report-controls-*/*.log
             /tmp/dv8-rust-tests.*
+            /tmp/dv8-faults-*/summary.json
+            /tmp/dv8-faults-*/*/*.log
+            /tmp/dv8-faults-*/*/report.json
             /tmp/dv8-preservation-*/*.log
             /tmp/dv8-preservation-*/summary.json
             /tmp/dv8-l5-audit-*/*.log
@@ -117,6 +120,9 @@ jobs:
             /tmp/dv8-audit-*/*.report.json
             /tmp/dv8-report-controls-*/*.json
             /tmp/dv8-report-controls-*/*.log
+            /tmp/dv8-faults-*/summary.json
+            /tmp/dv8-faults-*/*/*.log
+            /tmp/dv8-faults-*/*/report.json
             /tmp/dv8-preservation-*/*.log
             /tmp/dv8-preservation-*/summary.json
             /tmp/dv8-l5-audit-*/*.log

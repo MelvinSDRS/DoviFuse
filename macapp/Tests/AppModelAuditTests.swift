@@ -190,7 +190,8 @@ struct AppModelAuditTests {
             assert(model.isRunning)
             model.receiveEOF("stdout", id: id)
             let expected: String
-            if execution == "failed" { expected = "Failed" }
+            if execution == "cancelled" { expected = "Cancelled" }
+            else if execution == "failed" { expected = "Failed" }
             else if status == "inconclusive" { expected = "Completed — validation incomplete" }
             else if status == "warn" { expected = "Completed with warnings" }
             else { expected = model.mode == .checker ? "All checks passed" : "Completed" }

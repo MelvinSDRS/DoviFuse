@@ -28,6 +28,7 @@ python3 scripts/audit_smoke.py
 python3 scripts/test_p5_disabled.py
 python3 scripts/audit_standard_source.py
 python3 scripts/test_job_report.py
+python3 scripts/audit_faults.py
 python3 scripts/audit_preservation.py
 python3 scripts/audit_l5.py
 python3 scripts/audit_wrapper_smoke.py

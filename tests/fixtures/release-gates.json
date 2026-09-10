@@ -36,6 +36,12 @@
           "sha256": "73145d981702b97b84ff726be82c9cfb1e95021099bd60c5c0e75fb6c2512a54",
           "reviewer": "Codex, observed Linux and bundled/installed Mac execution",
           "method": "26 actual CLI job/report traces replayed through AppModel, including six P5 refusals; input identity, stale repair, pipe drain, trailing JSON, missing completion and outcome precedence controls. Full results and source hashes recorded in evidence."
+        },
+        {
+          "path": "docs/evidence/2026-09-10-stability.json",
+          "sha256": "8e7758171ce5570f5a4364b5089f4633a57b3b785d7877a9e1ad5d74079d7843",
+          "reviewer": "Codex; observed Linux and bundled Mac runs",
+          "method": "43 actual app replay traces including 17 new failure/cancellation traces; 19 fault/recovery cases on both platforms; 98 Rust tests and four L5 example tests. Full-length and playback gates remain pending."
         }
       ]
     }

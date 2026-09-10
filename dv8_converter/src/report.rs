@@ -142,7 +142,7 @@ impl JobReport {
         .into_iter()
         .map(|(name, path, flag)| {
             let version = path
-                .and_then(|p| std::process::Command::new(p).arg(flag).output().ok())
+                .and_then(|p| crate::exec::probe(p, flag).ok())
                 .filter(|o| o.status.success())
                 .map(|o| {
                     String::from_utf8_lossy(&o.stdout)

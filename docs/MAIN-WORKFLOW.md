@@ -33,3 +33,7 @@ See [recorded evidence](evidence/2026-09-10-main-p5-split.json).
 
 Full-length performance and Dolby playback gates remain pending. No remote push
 or publication is part of this change.
+
+The subsequent [stability audit](STABILITY-AUDIT-2026-09-10.md) tracks failure
+recovery, full-length measurements and playback acceptance for these supported
+workflows. Its new evidence does not enable Profile 5 or relax the release gates.
