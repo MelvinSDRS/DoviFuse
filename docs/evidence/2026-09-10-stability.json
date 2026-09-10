@@ -32,7 +32,7 @@
   },
   "candidate": {
     "linux_suite": "passed",
-    "rust_tests": 98,
+    "rust_tests": 99,
     "l5_example_tests": 4,
     "clippy": "passed without warnings",
     "mac_build": "BUILD SUCCEEDED; signature verified",
@@ -40,26 +40,26 @@
     "actual_app_report_replays": 46,
     "linux_faults": {
       "kind": "synthetic-fault-injection",
-      "binary_sha256": "1766505dada1d1aefc7832ca418d296e35ce92a3cd105d19a504b43147bf2176",
+      "binary_sha256": "5a00d47f84f5d9d37e02a683497c85b05879d4681e9d901e03e479ba7f231f67",
       "cases": [
         {
           "case": "cancel-capture-descendants",
-          "failure_or_cancellation_seconds": 0.064,
-          "status": "passed"
-        },
-        {
-          "case": "cancel-status-descendants",
           "failure_or_cancellation_seconds": 0.032,
           "status": "passed"
         },
         {
+          "case": "cancel-status-descendants",
+          "failure_or_cancellation_seconds": 0.064,
+          "status": "passed"
+        },
+        {
           "case": "cancel-version-probe",
-          "failure_or_cancellation_seconds": 0.035,
+          "failure_or_cancellation_seconds": 0.064,
           "status": "passed"
         },
         {
           "case": "simultaneous-output-reservation",
-          "failure_or_cancellation_seconds": 0.534,
+          "failure_or_cancellation_seconds": 0.53,
           "status": "passed"
         },
         {
@@ -69,7 +69,7 @@
         },
         {
           "case": "leader-exit-pipe-held",
-          "failure_or_cancellation_seconds": 2.072,
+          "failure_or_cancellation_seconds": 2.073,
           "status": "passed"
         },
         {
@@ -79,12 +79,12 @@
         },
         {
           "case": "conversion-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.016,
           "status": "passed"
         },
         {
           "case": "remux-disk-full",
-          "failure_or_cancellation_seconds": 0.031,
+          "failure_or_cancellation_seconds": 0.015,
           "status": "passed"
         },
         {
@@ -94,7 +94,7 @@
         },
         {
           "case": "scratch-disappeared",
-          "failure_or_cancellation_seconds": 0.064,
+          "failure_or_cancellation_seconds": 0.032,
           "status": "passed"
         },
         {
@@ -104,32 +104,32 @@
         },
         {
           "case": "replacement-readonly",
-          "failure_or_cancellation_seconds": 0.217,
+          "failure_or_cancellation_seconds": 0.114,
           "status": "passed"
         },
         {
           "case": "report-replaced-after-validation",
-          "failure_or_cancellation_seconds": 0.166,
+          "failure_or_cancellation_seconds": 0.114,
           "status": "passed"
         },
         {
           "case": "source-changed-before-replacement",
-          "failure_or_cancellation_seconds": 0.165,
+          "failure_or_cancellation_seconds": 0.114,
           "status": "passed"
         },
         {
           "case": "hybrid-edit-error",
-          "failure_or_cancellation_seconds": 0.032,
+          "failure_or_cancellation_seconds": 0.0,
           "status": "passed"
         },
         {
           "case": "hybrid-injection-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.032,
           "status": "passed"
         },
         {
           "case": "hybrid-remux-io-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.032,
           "status": "passed"
         },
         {
@@ -139,7 +139,7 @@
         },
         {
           "case": "repair-injection-error",
-          "failure_or_cancellation_seconds": 0.031,
+          "failure_or_cancellation_seconds": 0.015,
           "status": "passed"
         }
       ],
@@ -150,26 +150,26 @@
     },
     "mac_faults": {
       "kind": "synthetic-fault-injection",
-      "binary_sha256": "2c74fd9ae17303fbd36a3c195cf0b066c4fc4ed395c25a9b3202e3367097f9d2",
+      "binary_sha256": "64cbf7bc7d455648d80afdce68724a9635fe65c09357f15294d4ad763a6f8727",
       "cases": [
         {
           "case": "cancel-capture-descendants",
-          "failure_or_cancellation_seconds": 0.077,
+          "failure_or_cancellation_seconds": 0.067,
           "status": "passed"
         },
         {
           "case": "cancel-status-descendants",
-          "failure_or_cancellation_seconds": 0.047,
+          "failure_or_cancellation_seconds": 0.08,
           "status": "passed"
         },
         {
           "case": "cancel-version-probe",
-          "failure_or_cancellation_seconds": 0.089,
+          "failure_or_cancellation_seconds": 0.047,
           "status": "passed"
         },
         {
           "case": "simultaneous-output-reservation",
-          "failure_or_cancellation_seconds": 0.687,
+          "failure_or_cancellation_seconds": 0.565,
           "status": "passed"
         },
         {
@@ -179,22 +179,22 @@
         },
         {
           "case": "leader-exit-pipe-held",
-          "failure_or_cancellation_seconds": 2.066,
+          "failure_or_cancellation_seconds": 2.044,
           "status": "passed"
         },
         {
           "case": "extraction-io-error",
-          "failure_or_cancellation_seconds": 0.033,
+          "failure_or_cancellation_seconds": 0.038,
           "status": "passed"
         },
         {
           "case": "conversion-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.002,
           "status": "passed"
         },
         {
           "case": "remux-disk-full",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.001,
           "status": "passed"
         },
         {
@@ -204,7 +204,7 @@
         },
         {
           "case": "scratch-disappeared",
-          "failure_or_cancellation_seconds": 0.078,
+          "failure_or_cancellation_seconds": 0.068,
           "status": "passed"
         },
         {
@@ -214,27 +214,27 @@
         },
         {
           "case": "replacement-readonly",
-          "failure_or_cancellation_seconds": 0.017,
+          "failure_or_cancellation_seconds": 0.04,
           "status": "passed"
         },
         {
           "case": "report-replaced-after-validation",
-          "failure_or_cancellation_seconds": 0.064,
+          "failure_or_cancellation_seconds": 0.017,
           "status": "passed"
         },
         {
           "case": "source-changed-before-replacement",
-          "failure_or_cancellation_seconds": 0.071,
+          "failure_or_cancellation_seconds": 0.068,
           "status": "passed"
         },
         {
           "case": "hybrid-edit-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.004,
           "status": "passed"
         },
         {
           "case": "hybrid-injection-error",
-          "failure_or_cancellation_seconds": 0.033,
+          "failure_or_cancellation_seconds": 0.018,
           "status": "passed"
         },
         {
@@ -258,7 +258,7 @@
         "No power-loss or uninterruptible kernel I/O guarantee."
       ]
     },
-    "mac_binary_sha256": "2c74fd9ae17303fbd36a3c195cf0b066c4fc4ed395c25a9b3202e3367097f9d2",
+    "mac_binary_sha256": "64cbf7bc7d455648d80afdce68724a9635fe65c09357f15294d4ad763a6f8727",
     "native_mac_storage": {
       "kind": "native-filesystem-failure",
       "filesystem": "isolated 16 MiB HFS+ image",
@@ -268,7 +268,9 @@
       "source_retained_on_failure": true,
       "partial_archive_removed": true,
       "production_volumes_modified": false
-    }
+    },
+    "archive_cancellation": "Unit regression cancels after copying begins, removes partial archive, preserves source and retries successfully; native ENOSPC/retry passed",
+    "swift_concurrency": "Explicit Swift 6 / complete concurrency checking; 46 actual report replays passed after per-callback weak-capture fix"
   },
   "observed_limits": [
     "Synthetic fixtures validate mechanics, not creative grade equivalence.",
@@ -285,7 +287,7 @@
     "dv8_converter/src/enhancement.rs": "2d8a902a38abada56aff3dfde9ec78d769ac459722f7b0a377c8b06271d5f694",
     "dv8_converter/src/exec.rs": "14880f97024afbebd193c5f04d8560bd01563fdbe50f2de4e541ced38a9f6a50",
     "dv8_converter/src/ffmpeg.rs": "5ed7ccf8c9ea5c7b89b7546f4b9047501a2e172a0cee6429793f099c717fa708",
-    "dv8_converter/src/fsutil.rs": "f0cfa389b757ff47ba5133f7ca940b6fdae4850f4f4911019e7f1fcddcbc679d",
+    "dv8_converter/src/fsutil.rs": "c51371e6d9466d8db5f5f280fce5a9f97a576228e642bdce5d060efaf28ebbac",
     "dv8_converter/src/hybrid/active_area.rs": "46ada34db7d35e27104577fd7a25315e6025528db6ead00b4e56cdb487412b14",
     "dv8_converter/src/hybrid/align.rs": "e884afb31e083ff0210ae05627fc4d0b2d658a27901947a734defc25a7b2ab84",
     "dv8_converter/src/hybrid/editor.rs": "28c76cffd4b52375aaeb33fd2007667492bb518245562519b684e4ed9c946e9a",
@@ -309,17 +311,23 @@
     "scripts/audit_faults.py": "f8fb94d05a32d8d4d01875c67e98973d14f94938df91a55063605aac701ab58d",
     "scripts/stability_measure.py": "57e4f7203694cc1c7717032c551f17bdf53bec3c6204ac52236f54d18b3623ba",
     "scripts/test-linux.sh": "8abd85cc9c39b97da329df8de6ff0a9076f931f4216f937fcc9bf39f5f19a237",
-    "scripts/test-macos-bundle.sh": "0c95e8cc286eee1ee3d1df7f2dd9450a7c7200ff122cc9e33e34e889b29316d4",
-    "scripts/audit_macos_storage.py": "2e2c0f338f2409e845aa3c0cc28a3394c632b8a55348afc2cff121eedaf86703"
+    "scripts/test-macos-bundle.sh": "e68e8abc815b33be1d9d1264f6895460053aeee885bf572b5c6c7f8c1d6e8ce0",
+    "scripts/audit_macos_storage.py": "2e2c0f338f2409e845aa3c0cc28a3394c632b8a55348afc2cff121eedaf86703",
+    "macapp/DV8Maker/AppModel.swift": "fb656dc9339fb804390742a3ea8fc0f43c41f97a7e0f6a1a1db345f6c14d7a6a",
+    "macapp/DV8Maker.xcodeproj/project.pbxproj": "74a6f72beffc2013c8553d7bb10dc8716bc6654d5c1aaa1cdc79fc4deca50b1a",
+    "macapp/build-macos-app.sh": "1c18ad1f7d4b42dd4c1e5142d225f31c762cee9313f6b59e4a6fb3921a8d9465"
   },
   "local_log_sha256": {
     "dv8-stability-linux-final.log": "44efce8ff82325e438da1fd3da2427ea21a7da62af5949dc07abd074d5de4f38",
     "linux-candidate-v3.log": "3afee13b3ab0c6a1400d35bbf8bf97ae7106c089c3db99aa015b7e82d46401a8",
+    "linux-final.log": "d9ef1bedf1f227cf7bc87d4c105b8037bb8f7ecba8e281b0996a8256a58c79bb",
     "linux.log": "ba79e822f1c930b0714dff8ddaaf2890edd45746c0114a58cdd4028d6b993228",
     "mac-baseline.log": "8dbc5749dce538e8ea55b1a53eb1e5bb2a7d9baf69c8a555242da9c6cc86b557",
+    "mac-build-final.log": "8e130f5702996c10cef969481c55c7849eb706824df52d2ce1032cb57f0790ac",
     "mac-build-v3.log": "2546895ba2c316100d7158829e9d65b1402b069e5f31f34013ef39171422056e",
     "mac-build.log": "dd6c54e2650ebd77b1fb730a91f3a1f9bfad6d78599fee01105e90ea226f4ac5",
     "mac-candidate-v3.log": "3c388bec948c4b0963d0650e475d097c2271264cb4a7f060883e878a2d45a125",
-    "mac-candidate.log": "f02cb406ecccd5df6ca0d456838f33913b94b5da4c28ad577357e4d0240b148b"
+    "mac-candidate.log": "f02cb406ecccd5df6ca0d456838f33913b94b5da4c28ad577357e4d0240b148b",
+    "mac-final.log": "f2f3297a11dbcf35c08189a7d7ffe84c814c5bc1f596b2d3243b2b59318bb298"
   }
 }

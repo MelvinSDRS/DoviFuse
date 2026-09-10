@@ -30,6 +30,13 @@ identity immediately before rename and refuse to overwrite a changed source.
 Cancellation is checked at that boundary too. This is a filesystem-stat guard,
 not a content hash or an atomic lock against uncooperative writers.
 
+Code inspection also found that archive copying could not observe cancellation
+until a whole-file copy returned. Archives now copy in 4 MiB chunks, check
+cancellation between reads/writes, and sync the completed archive before removing
+its scratch source. A regression cancels after copying starts, verifies removal
+of the partial archive, and verifies a clean retry. Blocking filesystem calls
+remain subject to the operating system's I/O behavior.
+
 Process-group semantics were checked against the
 [Rust CommandExt documentation](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#method.process_group).
 DV conversion semantics remain those of the pinned
@@ -108,3 +115,7 @@ Publication stays behind the existing release-evidence gate.
 
 The first hosted run exposed a Clippy 1.98 lint in the pre-existing frame-count
 parser; its equivalent reverse-iterator lookup is included in this branch.
+The hosted Swift compiler also rejected shared weak captures across the pipe
+reader and main queue. Each queued callback now owns its own weak capture, while
+retaining per-stream FIFO delivery and the existing exit/EOF completion rule.
+App replay tests explicitly compile in Swift 6 with complete concurrency checking.

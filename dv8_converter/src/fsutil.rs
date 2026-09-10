@@ -1,5 +1,6 @@
 use std::ffi::OsString;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -102,14 +103,54 @@ pub(crate) fn reserve_output(path: &Path) -> AppResult<()> {
 }
 
 pub(crate) fn move_to_dir(src: &Path, dir: &Path) -> AppResult<()> {
+    move_to_dir_with_cancel(src, dir, crate::cancellation::requested)
+}
+
+fn move_to_dir_with_cancel(src: &Path, dir: &Path, cancelled: impl Fn() -> bool) -> AppResult<()> {
     let filename = src
         .file_name()
         .ok_or_else(|| format!("Invalid source path: {}", src.display()))?;
     let dst = dir.join(filename);
 
     // Never replace an existing archive with another release of the same name.
-    reserve_output(&dst)?;
-    if let Err(e) = fs::copy(src, &dst) {
+    let mut destination = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&dst)
+        .map_err(|e| format!("Cannot reserve archive {}: {e}", dst.display()))?;
+    let copied = (|| -> AppResult<()> {
+        let metadata = fs::metadata(src).map_err(|e| e.to_string())?;
+        if !metadata.is_file() {
+            return Err("Archive source is not a regular file".into());
+        }
+        let mut source = fs::File::open(src).map_err(|e| e.to_string())?;
+        let mut buffer = vec![0_u8; 4 * 1024 * 1024];
+        loop {
+            if cancelled() {
+                return Err("Archive copy cancelled".into());
+            }
+            let count = source.read(&mut buffer).map_err(|e| e.to_string())?;
+            if count == 0 {
+                break;
+            }
+            if cancelled() {
+                return Err("Archive copy cancelled".into());
+            }
+            destination
+                .write_all(&buffer[..count])
+                .map_err(|e| e.to_string())?;
+        }
+        destination
+            .set_permissions(source.metadata().map_err(|e| e.to_string())?.permissions())
+            .map_err(|e| e.to_string())?;
+        destination.sync_all().map_err(|e| e.to_string())?;
+        if cancelled() {
+            return Err("Archive copy cancelled".into());
+        }
+        Ok(())
+    })();
+    drop(destination);
+    if let Err(e) = copied {
         let _ = fs::remove_file(&dst);
         return Err(format!("Failed to archive {}: {e}", src.display()));
     }
@@ -143,6 +184,28 @@ pub(crate) fn collect_mkv_files(dir: &Path, out: &mut Vec<PathBuf>) -> AppResult
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_cancel_after_copy_starts_preserves_source_and_removes_partial() {
+        let root = create_job_dir(&std::env::temp_dir(), "dv8-archive-cancel-test").unwrap();
+        let archive = root.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let source = root.join("source.hevc");
+        let bytes = vec![42; 4 * 1024 * 1024 + 1];
+        fs::write(&source, &bytes).unwrap();
+        let destination = archive.join("source.hevc");
+        let result = move_to_dir_with_cancel(&source, &archive, || {
+            fs::metadata(&destination).is_ok_and(|m| m.len() > 0)
+        });
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert_eq!(fs::read(&source).unwrap(), bytes);
+        assert!(!destination.exists());
+        // A clean retry must not encounter a stale reservation or partial archive.
+        move_to_dir_with_cancel(&source, &archive, || false).unwrap();
+        assert!(!source.exists());
+        assert_eq!(fs::read(&destination).unwrap(), bytes);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn archive_collision_preserves_both_files() {

@@ -52,7 +52,7 @@ codesign --verify --deep --strict "$APP"
 TEST_DIR=$(mktemp -d /tmp/dv8-app-state.XXXXXX)
 TEST_BIN="$TEST_DIR/test"
 trap 'rm -rf "$TEST_DIR"' EXIT
-xcrun swiftc -parse-as-library \
+xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
   "$ROOT/macapp/DV8Maker/AppModel.swift" \
   "$ROOT/macapp/DV8Maker/ScratchCapacity.swift" \
   "$ROOT/macapp/Tests/AppModelAuditTests.swift" -o "$TEST_BIN"

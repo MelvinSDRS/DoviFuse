@@ -39,9 +39,9 @@
         },
         {
           "path": "docs/evidence/2026-09-10-stability.json",
-          "sha256": "35f9d3de2e1fd6efc0109f779d33fa8727490fe8203dae8d31cefc7782dcbeaf",
+          "sha256": "86ba0f8e5cb1b24b9a56a0877b19d6cc308bc43416821c2d3e226a04cdb47a39",
           "reviewer": "Codex; observed Linux and bundled Mac runs",
-          "method": "46 actual app replay traces including new failures, cancellations and native ENOSPC/retry; 20 fault/recovery cases on both platforms; 98 Rust tests and four L5 example tests. Full-length and playback gates remain pending."
+          "method": "46 actual app replay traces under Swift 6, including failures, cancellations and native ENOSPC/retry; 20 fault/recovery cases on both platforms; 99 Rust tests and four L5 example tests. Full-length and playback gates remain pending."
         }
       ]
     }

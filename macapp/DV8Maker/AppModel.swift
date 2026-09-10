@@ -456,17 +456,18 @@ final class AppModel: ObservableObject {
             while true {
                 do {
                     guard let data = try handle.read(upToCount: 65_536), !data.isEmpty else { break }
-                    DispatchQueue.main.async { self?.receiveOutput(data, stream: stream, id: id) }
+                    DispatchQueue.main.async { [weak self] in self?.receiveOutput(data, stream: stream, id: id) }
                 } catch {
-                    DispatchQueue.main.async {
+                    let message = error.localizedDescription
+                    DispatchQueue.main.async { [weak self] in
                         guard let self, self.runID == id else { return }
-                        self.errorMessage = "Could not finish reading converter output: \(error.localizedDescription)"
+                        self.errorMessage = "Could not finish reading converter output: \(message)"
                     }
                     break
                 }
             }
             try? handle.close()
-            DispatchQueue.main.async { self?.receiveEOF(stream, id: id) }
+            DispatchQueue.main.async { [weak self] in self?.receiveEOF(stream, id: id) }
         }
     }
 
