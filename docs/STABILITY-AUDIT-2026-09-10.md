@@ -72,6 +72,9 @@ files; a subsequent job refuses them. It does not automatically resume or erase
 them. A test supervisor explicitly stops surviving test tools after this control.
 SIGKILL, power loss, escaped process groups and uninterruptible kernel/storage I/O
 are not covered by the ordinary cancellation guarantee.
+The forced-kill control targets the converter process. A native GUI force-quit
+and relaunch during an active disposable job remains a separate unperformed check;
+report replay tests do not substitute for it.
 
 Standard replacement remains intentional: before the validated rename the source
 is retained; after that rename a later report-write failure must fail the job
@@ -101,6 +104,28 @@ donor/target coverage separate from any derived same-source mechanics fixtures.
 The full-length and playback release gates remain pending until this entire
 matrix and the manual checklist have supporting observations. Synthetic tests,
 a successful build, or partial real-media runs cannot close either gate.
+
+The first completed full-length comparison is the P8 checker: 148,262 frames,
+912.223 seconds on the baseline and 911.370 seconds on the measured candidate.
+Both fully decoded the input and passed frame/RPU and offset-zero sync checks.
+Sampled scratch peaked at 33,191,052 bytes, with no remaining scratch or surviving
+children. The candidate measurement predates the archive-only change; its exact
+binary identity and the initial overlapping copy workload are recorded in
+[the partial measurement evidence](evidence/2026-09-10-full-length.json).
+
+## Action plan status
+
+| Work | Evidence and next acceptance step |
+| --- | --- |
+| Reproducible baseline | Complete: preserved executables, source hashes, Linux/Mac suites, independent media-copy checksums and hardware/storage record. |
+| Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 99 Rust tests and 46 actual app report replays. |
+| Native GUI interruption | Pending: force-quit/relaunch while an isolated disposable job is active, then inspect reports, source retention and recovery. Existing SIGKILL coverage targets the converter. |
+| Full-length resource/performance matrix | In progress: P8 checker pair complete; standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, resource estimates and any repeatable runtime increase over 10%. |
+| Independent hybrid reference coverage | Pending: same-source positive controls cannot establish independent WEB/Blu-ray grade equivalence. Retain conservative grade, alignment and L5 refusals. |
+| Dolby playback QC | Pending user observations on Apple TV 4K / Infuse / LG C1 over SMB, with output identities and timestamps. |
+| Hosted CI | Passed for candidate `343e5f36691ff9cf594cbbf890c2fedb3c828cbc`, [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34542446424). |
+| Mac installation | Queued behind the active conversion, with preserved rollback, installed smoke tests, signature verification and relaunch required. |
+| Publication | Blocked by pending full-length and Dolby playback release gates. |
 
 ## Playback and release
 

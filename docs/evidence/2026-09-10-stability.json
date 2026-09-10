@@ -270,7 +270,14 @@
       "production_volumes_modified": false
     },
     "archive_cancellation": "Unit regression cancels after copying begins, removes partial archive, preserves source and retries successfully; native ENOSPC/retry passed",
-    "swift_concurrency": "Explicit Swift 6 / complete concurrency checking; 46 actual report replays passed after per-callback weak-capture fix"
+    "swift_concurrency": "Explicit Swift 6 / complete concurrency checking; 46 actual report replays passed after per-callback weak-capture fix",
+    "hosted_ci": {
+      "commit": "343e5f36691ff9cf594cbbf890c2fedb3c828cbc",
+      "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34542446424",
+      "linux": "passed",
+      "mac_apple_silicon": "passed",
+      "publication": "not run; release gates remain pending"
+    }
   },
   "observed_limits": [
     "Synthetic fixtures validate mechanics, not creative grade equivalence.",

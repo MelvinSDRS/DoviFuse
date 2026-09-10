@@ -1,0 +1,277 @@
+{
+  "date": "2026-09-10",
+  "acceptance": "pending remaining standard/hybrid comparisons and real-media cancellation",
+  "hardware": {
+    "model": "Mac16,10",
+    "ram_bytes": 17179869184,
+    "os": "macOS 27",
+    "scratch": "Samsung T5 APFS, separate owned directory per job group",
+    "input_output": "NAS over SMB, independent disposable copies"
+  },
+  "completed_observations": [
+    {
+      "build": "baseline",
+      "case": "full-length P8 checker",
+      "input_sha256": "6912a204b185d6f57eb4ca9d2d58cfd0cd7b51c563be6f79b32f8ab3a0825187",
+      "input_bytes": 16842012849,
+      "binary_sha256": "7e675a3675289a1cf7229d1bc5e6c006055fa55d733a728cf2b080341398a819",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 0,
+      "elapsed_seconds": 912.22253975,
+      "peak_process_tree_rss_bytes_sampled": 585613312,
+      "peak_scratch_bytes_sampled": 33191052,
+      "sample_interval_seconds": 0.5,
+      "samples": 1685,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "execution": "completed",
+      "validation": "pass",
+      "checks": [
+        {
+          "detail": "Container is readable and contains an HEVC video track",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "container",
+          "label": "Matroska / HEVC structure",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Profile 8 detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "profile",
+          "label": "Dolby Vision profile",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "10-bit BT.2020, PQ \u2014 HDR10 / HDR10",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "hdr10",
+          "label": "HDR10 base layer",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Parsed 148262 RPU frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "rpu",
+          "label": "Dolby Vision RPU",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Video and RPU both contain 148262 frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "frames",
+          "label": "Frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Decoded 148262 video frames; RPU contains 148262",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decoded_frames",
+          "label": "Decoded frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Entire video decoded successfully; 564 scene changes detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decode",
+          "label": "Full video decode",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "RPU and video scene changes align at offset 0 (560 matches, 50% of RPU cuts, dominance 18.7)",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "sync",
+          "label": "Metadata sync",
+          "status": "pass",
+          "version": 1
+        }
+      ],
+      "raw_measurement_sha256": "89b668c9fe96f748181ea96dc0edb467d6f7888337bc8109ea248761f31ef50a",
+      "raw_report_sha256": "647fe6e0e26d437bf57799995fd6301f062afcefd302b7b24d2849c15ce431cb",
+      "tools": [
+        {
+          "name": "dovi_tool",
+          "version": "dovi_tool 2.3.1"
+        },
+        {
+          "name": "mkvmerge",
+          "version": "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mkvextract",
+          "version": "mkvextract v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mediainfo",
+          "version": "MediaInfo Command line, \nMediaInfoLib - v26.05"
+        },
+        {
+          "name": "ffmpeg",
+          "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        },
+        {
+          "name": "ffprobe",
+          "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        }
+      ]
+    },
+    {
+      "build": "candidate",
+      "case": "full-length P8 checker",
+      "input_sha256": "6912a204b185d6f57eb4ca9d2d58cfd0cd7b51c563be6f79b32f8ab3a0825187",
+      "input_bytes": 16842012849,
+      "binary_sha256": "2c74fd9ae17303fbd36a3c195cf0b066c4fc4ed395c25a9b3202e3367097f9d2",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 0,
+      "elapsed_seconds": 911.369937792,
+      "peak_process_tree_rss_bytes_sampled": 605913088,
+      "peak_scratch_bytes_sampled": 33191052,
+      "sample_interval_seconds": 0.5,
+      "samples": 1682,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "execution": "completed",
+      "validation": "pass",
+      "checks": [
+        {
+          "detail": "Container is readable and contains an HEVC video track",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "container",
+          "label": "Matroska / HEVC structure",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Profile 8 detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "profile",
+          "label": "Dolby Vision profile",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "10-bit BT.2020, PQ \u2014 HDR10 / HDR10",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "hdr10",
+          "label": "HDR10 base layer",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Parsed 148262 RPU frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "rpu",
+          "label": "Dolby Vision RPU",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Video and RPU both contain 148262 frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "frames",
+          "label": "Frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Decoded 148262 video frames; RPU contains 148262",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decoded_frames",
+          "label": "Decoded frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Entire video decoded successfully; 564 scene changes detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decode",
+          "label": "Full video decode",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "RPU and video scene changes align at offset 0 (560 matches, 50% of RPU cuts, dominance 18.7)",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "sync",
+          "label": "Metadata sync",
+          "status": "pass",
+          "version": 1
+        }
+      ],
+      "raw_measurement_sha256": "d3bb81290ffe8d354e42753323125cd7fea33830421cc5b60bf32863cf12f948",
+      "raw_report_sha256": "188ef88fece87268d44dd0fb824b8e0ecb6070ee8986c07de4bfe74a0ea2b3dd",
+      "tools": [
+        {
+          "name": "dovi_tool",
+          "version": "dovi_tool 2.3.1"
+        },
+        {
+          "name": "mkvmerge",
+          "version": "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mkvextract",
+          "version": "mkvextract v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mediainfo",
+          "version": "MediaInfo Command line, \nMediaInfoLib - v26.05"
+        },
+        {
+          "name": "ffmpeg",
+          "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        },
+        {
+          "name": "ffprobe",
+          "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        }
+      ]
+    }
+  ],
+  "elapsed_difference_percent": -0.09346425031699912,
+  "limits": [
+    "P8 checker candidate predates the archive-only Rust change; checker code was unchanged by that change. Binary identities are recorded separately.",
+    "Initial baseline overlapped media-copy I/O; these observations are not a controlled statistical benchmark or a speedup claim.",
+    "Resource peaks are process-tree RSS and file sizes sampled every 0.5 seconds.",
+    "No manual Dolby playback observations received.",
+    "Queued same-source P7/P8 hybrid controls test mechanics and performance; independent donor/target grade acceptance remains separate."
+  ]
+}
