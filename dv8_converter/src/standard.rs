@@ -91,6 +91,7 @@ pub(crate) fn make_dv8_name(name: &str) -> String {
 }
 
 pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppResult<()> {
+    let source_identity = crate::report::identity(file);
     let input_dir = file
         .parent()
         .ok_or_else(|| format!("Invalid path: {}", file.display()))?;
@@ -302,6 +303,12 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
     // Both paths are in the input directory. On Unix, rename atomically
     // replaces the original; if it fails, CleanupGuard removes only the
     // temporary output and the original remains untouched.
+    if crate::report::identity(file) != source_identity {
+        return Err("Source filesystem identity changed during conversion; refusing to replace the changed source".into());
+    }
+    if crate::cancellation::requested() {
+        return Err("Conversion cancelled before source replacement".into());
+    }
     fs::rename(&out_file, &final_file).map_err(|e| {
         format!(
             "Failed to rename output {} to {}: {e}",

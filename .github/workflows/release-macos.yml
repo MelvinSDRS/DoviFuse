@@ -115,6 +115,9 @@ jobs:
         with:
           name: macos-regression-evidence
           path: |
+            /tmp/dv8-storage-*/summary.json
+            /tmp/dv8-storage-*/*.log
+            /tmp/dv8-storage-*/*.json
             /tmp/dv8-audit-*/*.log
             /tmp/dv8-audit-*/summary.json
             /tmp/dv8-audit-*/*.report.json

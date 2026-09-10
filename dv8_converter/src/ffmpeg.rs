@@ -345,7 +345,7 @@ pub(crate) fn scan_video(
                 .strip_prefix("frame=")
                 .and_then(|v| v.trim().parse::<u64>().ok())
         })
-        .last()
+        .next_back()
         .filter(|n| *n > 0)
         .ok_or_else(|| "Full decode did not report any video frames".to_string())?;
     Ok(VideoScan {

@@ -28,6 +28,7 @@ def alive(pid):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', action='store_true')
+    parser.add_argument('--case', help='Run one named control for reproduction')
     opts = parser.parse_args()
     resources = Path(os.environ.get('DV8_AUDIT_RESOURCES', ROOT))
     binary = Path(os.environ.get('DV8_AUDIT_BIN', ROOT/'dv8_converter/target/debug/dv8_converter'))
@@ -53,12 +54,16 @@ def main():
         ('archive-disappeared', 'archive', 'dovi_tool', ['demux'], 'lose-archive'),
         ('replacement-readonly', 'standard', 'ffmpeg', ['-vf'], 'readonly-output'),
         ('report-replaced-after-validation', 'standard', 'ffmpeg', ['-vf'], 'replace-report'),
+        ('source-changed-before-replacement', 'standard', 'ffmpeg', ['-vf'], 'mutate-source'),
         ('hybrid-edit-error', 'hybrid', 'dovi_tool', ['editor'], 'fail'),
         ('hybrid-injection-error', 'hybrid', 'dovi_tool', ['inject-rpu'], 'fail'),
         ('hybrid-remux-io-error', 'hybrid', 'mkvmerge', ['-o'], 'fail'),
         ('checker-decode-error', 'check', 'ffmpeg', ['-vf'], 'fail'),
         ('repair-injection-error', 'repair', 'dovi_tool', ['inject-rpu'], 'fail'),
     ]
+    if opts.case:
+        cases = [case for case in cases if case[0] == opts.case]
+        assert cases, 'Unknown fault case: '+opts.case
     results = []
     app_replays = []
     for name, mode, tool, tokens, action in cases:

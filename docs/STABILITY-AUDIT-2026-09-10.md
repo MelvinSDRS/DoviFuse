@@ -24,6 +24,12 @@ indefinitely. Streaming commands bound individual output chunks to 64 KiB.
 Temporary-file cleanup failures now produce warnings with the affected path.
 No CLI options or report schema changes are required.
 
+A separate control reproduced replacement of a source whose filesystem identity
+changed during standard conversion. Standard jobs now compare the original
+identity immediately before rename and refuse to overwrite a changed source.
+Cancellation is checked at that boundary too. This is a filesystem-stat guard,
+not a content hash or an atomic lock against uncooperative writers.
+
 Process-group semantics were checked against the
 [Rust CommandExt documentation](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#method.process_group).
 DV conversion semantics remain those of the pinned
@@ -39,17 +45,22 @@ Run `scripts/test-linux.sh`, then build the Mac app and run
 For an unchanged executable, set `DV8_AUDIT_BIN` and pass `--baseline` to retain
 all failed controls instead of stopping at the first failure.
 
-The 19 additional scenarios cover cancellation during captured output, streamed
+The 20 additional scenarios cover cancellation during captured output, streamed
 output and probing; abandoned descendant pipes; simultaneous output reservation;
 forced termination/restart; extraction, conversion, editing, injection, remux and
 decode errors; scratch/archive disappearance; a read-only replacement directory;
-and report replacement after output validation. Existing suites cover truncated
+report replacement after output validation, and source changes before replacement. Existing suites cover truncated
 inputs, archive collisions, stale repair, header/payload preservation, P5 refusal,
 and the qBittorrent failure boundary.
 
 ENOSPC and EIO are deterministic **tool-boundary injections**, not a physical NAS
 disconnect. Directory removal and permission changes affect only owned test
-directories. SIGKILL leaves a running/inconclusive report and owned temporary
+directories. The Mac suite additionally fills an isolated 16 MiB HFS+ disk image
+to actual ENOSPC: archive failure retains the source, removes the partial archive,
+and succeeds on retry after the owned fill file is removed. Both reports are
+replayed through the app, bringing the final replay count to 46.
+
+SIGKILL leaves a running/inconclusive report and owned temporary
 files; a subsequent job refuses them. It does not automatically resume or erase
 them. A test supervisor explicitly stops surviving test tools after this control.
 SIGKILL, power loss, escaped process groups and uninterruptible kernel/storage I/O
@@ -94,3 +105,6 @@ successful Dolby playback from metadata or software decode alone.
 Final acceptance also requires Linux and bundled Mac suites, hosted CI on the
 candidate commit, and installation/signature/relaunch proof for that candidate.
 Publication stays behind the existing release-evidence gate.
+
+The first hosted run exposed a Clippy 1.98 lint in the pre-existing frame-count
+parser; its equivalent reverse-iterator lookup is included in this branch.

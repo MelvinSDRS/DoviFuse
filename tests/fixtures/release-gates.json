@@ -39,9 +39,9 @@
         },
         {
           "path": "docs/evidence/2026-09-10-stability.json",
-          "sha256": "8e7758171ce5570f5a4364b5089f4633a57b3b785d7877a9e1ad5d74079d7843",
+          "sha256": "35f9d3de2e1fd6efc0109f779d33fa8727490fe8203dae8d31cefc7782dcbeaf",
           "reviewer": "Codex; observed Linux and bundled Mac runs",
-          "method": "43 actual app replay traces including 17 new failure/cancellation traces; 19 fault/recovery cases on both platforms; 98 Rust tests and four L5 example tests. Full-length and playback gates remain pending."
+          "method": "46 actual app replay traces including new failures, cancellations and native ENOSPC/retry; 20 fault/recovery cases on both platforms; 98 Rust tests and four L5 example tests. Full-length and playback gates remain pending."
         }
       ]
     }

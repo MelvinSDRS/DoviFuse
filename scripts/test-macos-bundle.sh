@@ -43,6 +43,7 @@ PY
 "$PYTHON" "$ROOT/scripts/audit_standard_source.py"
 "$PYTHON" "$ROOT/scripts/test_job_report.py"
 "$PYTHON" "$ROOT/scripts/audit_faults.py"
+"$PYTHON" "$ROOT/scripts/audit_macos_storage.py"
 "$PYTHON" "$ROOT/scripts/audit_preservation.py"
 DV8_L5_TIMELINE_BIN="$ROOT/dv8_converter/target/release/examples/l5_timeline" \
   "$PYTHON" "$ROOT/scripts/audit_l5.py"

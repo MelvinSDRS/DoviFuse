@@ -45,5 +45,9 @@ else:
         report = work/'report.json'
         report.unlink()
         report.write_text('unrelated replacement report')
+    elif action == 'mutate-source':
+        source = work/'media/p7.mkv'
+        stat = source.stat()
+        os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns+2_000_000_000))
     else:
         raise ValueError(action)
