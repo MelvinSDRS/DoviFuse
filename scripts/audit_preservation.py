@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import unicodedata
 import wave
+import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
 WORK=Path(tempfile.mkdtemp(prefix='dv8-preservation-',dir='/tmp'))
@@ -115,6 +116,57 @@ for label in ['standard','hybrid']:
         require(len(a)==len(b) and all(abs(x-y)<=1 for x,y in zip(a,b)),label+': timestamps changed')
     if label=='hybrid':require(digest(source)==source_hash,'Hybrid source modified')
     results[label]={'metadata':'preserved','audio_subtitles_attachments_sha256':'matched','base_layer_vcl':after['base_layer_vcl'],'chapters_xml':'matched','track_timestamps':'within 1ms','tracks':len(after['track_headers'])}
+
+# MakeMKV inputs intentionally trigger MKVToolNix's UID regeneration. Verify
+# payloads and the actual chapter/tag references, rather than discarding UID
+# comparisons for every container or requiring MakeMKV's old numeric values.
+propedit = shutil.which('mkvpropedit') or str(RESOURCES/'vendor/MKVToolNix/mkvpropedit')
+for label in ['standard', 'hybrid']:
+    source=WORK/(label+'-makemkv.mkv')
+    shutil.copyfile(WORK/(label+'-original.mkv'),source)
+    audio_uid=manifest(source)['tracks'][0]['properties']['uid']
+    chapters=ET.fromstring((WORK/'chapters.xml').read_text())
+    for atom in chapters.iter('ChapterAtom'):
+        ET.SubElement(ET.SubElement(atom,'ChapterTrack'),'ChapterTrackNumber').text=str(audio_uid)
+    chapter_file=WORK/(label+'-makemkv-chapters.xml')
+    chapter_file.write_text('<?xml version="1.0"?>\n'+ET.tostring(chapters,encoding='unicode'))
+    tags=WORK/(label+'-makemkv-tags.xml')
+    tags.write_text(f'<?xml version="1.0"?>\n<Tags><Tag><Targets><TrackUID>{audio_uid}</TrackUID></Targets><Simple><Name>AUDIT_LABEL</Name><String>preserve-audio</String></Simple></Tag><Tag><Targets><ChapterUID>103</ChapterUID></Targets><Simple><Name>AUDIT_CHAPTER</Name><String>preserve-chapter</String></Simple></Tag></Tags>')
+    run([propedit,source,'--chapters',chapter_file,'--tags','all:'+str(tags),
+         '--edit','info','--set','writing-application=MakeMKV v1.15.3 darwin(x64-release)'],label+'-makemkv-author')
+    before=snapshot(source,label+'-makemkv-before');source_hash=digest(source)
+    output=source if label=='standard' else WORK/'makemkv-hybrid-output.mkv'
+    command=[BIN,'--progress','jsonl','--hwaccel','off']
+    command+=['-n',source] if label=='standard' else ['--hybrid','-o',output,SEEDS/'dv.mkv',source]
+    run(command,label+'-makemkv-convert')
+    after=snapshot(output,label+'-makemkv-after')
+    new_uid=manifest(output)['tracks'][0]['properties']['uid']
+    require(new_uid!=audio_uid,'Fixture did not trigger MakeMKV UID regeneration')
+    for value in [before,after]:
+        for track in value['track_headers']: track.pop('uid',None)
+    for key in ['track_headers','streams','attachments','title','base_layer_vcl']:
+        require(before[key]==after[key],label+': MakeMKV changed '+key)
+    for a,b in zip(before['timestamps'],after['timestamps']):
+        require(len(a)==len(b) and all(abs(x-y)<=1 for x,y in zip(a,b)),label+': MakeMKV timestamps changed')
+    normalized=[]
+    for value,uid in [(before,audio_uid),(after,new_uid)]:
+        tree=ET.fromstring(value['chapters'])
+        for node in tree.iter('ChapterTrackNumber'):
+            require(node.text==str(uid),label+': chapter track reference was not remapped')
+            node.text='audio-track'
+        for name in ['EditionUID','ChapterUID']:
+            for index,node in enumerate(tree.iter(name)): node.text=str(index)
+        normalized.append(ET.tostring(tree))
+    require(normalized[0]==normalized[1],label+': MakeMKV chapter structure/content changed')
+    output_chapters=ET.fromstring(after['chapters'])
+    chapter_uids={atom.findtext('ChapterDisplay/ChapterString'):atom.findtext('ChapterUID') for atom in output_chapters.iter('ChapterAtom')}
+    output_tags=ET.fromstring(run(['mkvextract',output,'tags'],label+'-makemkv-tags').stdout)
+    observed={simple.findtext('Name'):(simple.findtext('String'),tag.findtext('Targets/TrackUID'),tag.findtext('Targets/ChapterUID')) for tag in output_tags.findall('Tag') for simple in tag.findall('Simple') if simple.findtext('Name','').startswith('AUDIT_')}
+    require(observed=={'AUDIT_LABEL':('preserve-audio',str(new_uid),None),
+                       'AUDIT_CHAPTER':('preserve-chapter',None,chapter_uids['Suite'])},label+': MakeMKV tag targets/content changed')
+    if label=='hybrid':require(digest(source)==source_hash,'MakeMKV hybrid source changed')
+    results[label+'-makemkv']={'payloads':'matched','track_uids':'regenerated as documented',
+                              'chapter_and_tag_references':'remapped correctly','chapter_content':'preserved'}
 
 # A successful mux that loses a header must still fail before source replacement/deletion.
 import sys

@@ -44,6 +44,19 @@ DV conversion semantics remain those of the pinned
 standard P7 conversion preserves base pictures and converted RPU, not FEL residual
 reconstruction. No new grade-equivalence claim is introduced.
 
+The first full-length FEL conversion exposed another baseline rejection:
+MKVToolNix regenerated a MakeMKV audio track UID, and the preservation verifier
+incorrectly treated that expected change as corruption. A small independently
+authored fixture reproduced the same failure. The verifier now permits numeric
+UID regeneration specifically for MakeMKV writing-application metadata and
+requires nonzero, unique output identifiers. Other sources still require their
+non-video UIDs to match. This follows the
+[documented MKVToolNix behavior](https://mkvtoolnix.download/doc/mkvmerge.html#mkvmerge.description.regenerate_track_uids)
+and its version 100 Matroska reader. Added Linux/Mac standard and hybrid controls
+verify payload hashes, timestamps, chapter content, and actual chapter/tag
+reference remapping. Runtime header checks do not imply a full payload hash of
+every production track.
+
 ## Reproducible verification
 
 Run `scripts/test-linux.sh`, then build the Mac app and run
@@ -72,9 +85,13 @@ files; a subsequent job refuses them. It does not automatically resume or erase
 them. A test supervisor explicitly stops surviving test tools after this control.
 SIGKILL, power loss, escaped process groups and uninterruptible kernel/storage I/O
 are not covered by the ordinary cancellation guarantee.
-The forced-kill control targets the converter process. A native GUI force-quit
-and relaunch during an active disposable job remains a separate unperformed check;
-report replay tests do not substitute for it.
+A separate native Mac interruption control compiles the production `AppModel`
+in an isolated native app host, holds validation on synthetic media, force-kills
+that host and relaunches it. The source/report survive and restart neither resumes
+the job nor displays success. The supervisor explicitly stops the orphaned job
+within ten seconds. Run `scripts/audit_macos_app_crash.py` with the same
+`DV8_AUDIT_RESOURCES` and `DV8_AUDIT_FIXTURES` as the Mac suite in a logged-in GUI
+session. Its audit-only entry point/window does not exercise UI file selection.
 
 Standard replacement remains intentional: before the validated rename the source
 is retained; after that rename a later report-write failure must fail the job
@@ -113,18 +130,27 @@ children. The candidate measurement predates the archive-only change; its exact
 binary identity and the initial overlapping copy workload are recorded in
 [the partial measurement evidence](evidence/2026-09-10-full-length.json).
 
+The unchanged full-length FEL baseline rejected the remux after 2,125.758 seconds,
+with 82,870,679,022 bytes of sampled scratch use and no leftover scratch or child
+processes. Full RPU inspection confirmed FEL across 149,006 frames. The input's
+filesystem identity and its full SHA-256 remained unchanged. This failed run is retained as failure
+evidence, not compared with a completed candidate as a runtime regression.
+Further timing comparisons use a clearly identified control built from the
+original baseline with **only the MakeMKV UID correction**; the unmodified
+baseline executable and its failed result remain preserved separately.
+
 ## Action plan status
 
 | Work | Evidence and next acceptance step |
 | --- | --- |
 | Reproducible baseline | Complete: preserved executables, source hashes, Linux/Mac suites, independent media-copy checksums and hardware/storage record. |
-| Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 99 Rust tests and 46 actual app report replays. |
-| Native GUI interruption | Pending: force-quit/relaunch while an isolated disposable job is active, then inspect reports, source retention and recovery. Existing SIGKILL coverage targets the converter. |
-| Full-length resource/performance matrix | In progress: P8 checker pair complete; standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, resource estimates and any repeatable runtime increase over 10%. |
+| Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 100 Rust tests, MakeMKV preservation controls and 46 actual app report replays. |
+| Native app interruption | Passed in an isolated native host using production AppModel: source/report retained, restart idle without false success, orphaned test job explicitly stopped by supervisor. UI file selection is outside this control. |
+| Full-length resource/performance matrix | P8 checker pair complete. FEL baseline exposed MakeMKV rejection; corrected-control comparisons are being prepared. Standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
 | Independent hybrid reference coverage | Pending: same-source positive controls cannot establish independent WEB/Blu-ray grade equivalence. Retain conservative grade, alignment and L5 refusals. |
 | Dolby playback QC | Pending user observations on Apple TV 4K / Infuse / LG C1 over SMB, with output identities and timestamps. |
-| Hosted CI | Passed for candidate `343e5f36691ff9cf594cbbf890c2fedb3c828cbc`, [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34542446424). |
-| Mac installation | Queued behind the active conversion, with preserved rollback, installed smoke tests, signature verification and relaunch required. |
+| Hosted CI | Passed for previous candidate `343e5f36691ff9cf594cbbf890c2fedb3c828cbc`, [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34542446424). Final MakeMKV correction run pending. |
+| Mac installation | Previous candidate installed, signed, smoke-tested and relaunched with preserved rollback. Updated MakeMKV candidate built and Mac-suite verified; its installation is pending. |
 | Publication | Blocked by pending full-length and Dolby playback release gates. |
 
 ## Playback and release

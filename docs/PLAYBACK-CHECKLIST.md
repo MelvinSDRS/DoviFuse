@@ -1,6 +1,8 @@
 # Dolby Vision playback acceptance
 
 Setup supplied by the user: **Apple TV 4K → Infuse → LG C1; NAS through SMB**.
+Versions/settings supplied by the user: **tvOS 27 Golden Master, Infuse 8.5.3,
+LG C1 firmware 03.53.45, Cinema picture mode**.
 Status: **pending actual playback observations**.
 
 For each output, record in the private audit folder:
@@ -10,9 +12,9 @@ For each output, record in the private audit folder:
 | Case | Standard MEL / standard FEL / P7 hybrid / P8 hybrid |
 | File and SHA-256 | Pending |
 | Converter commit and job report | Pending |
-| Apple TV model and tvOS version | Pending |
-| Infuse version | Pending |
-| LG firmware / picture mode | Pending |
+| Apple TV model and tvOS version | Apple TV 4K (generation unspecified), tvOS 27 Golden Master |
+| Infuse version | 8.5.3 |
+| LG firmware / picture mode | LG C1, 03.53.45, Cinema |
 | Apple TV video output and Match Dynamic Range settings | Pending |
 | Infuse Profile 8 Dolby Vision playback setting | Pending |
 

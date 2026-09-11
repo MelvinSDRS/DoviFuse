@@ -28,11 +28,24 @@
     "reproduced_source_overwrite": {
       "case": "source-changed-before-replacement",
       "failure": "Baseline reported success and replaced the changed source"
+    },
+    "makemkv_failure": {
+      "error": "Remux changed track 1 property uid: 2 -> 15434635863944555991",
+      "full_length_elapsed_seconds": 2125.757507042,
+      "sampled_peak_scratch_bytes": 82870679022,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "full_rpu_classification": "149006 RPUs, FEL",
+      "source_retention": {
+        "sha256": "944d9d6e00df097494c856671b33a3e8f0a3db05d930c64ecca8b6d958d4bf7b",
+        "matches_initial_independent_copy": true
+      },
+      "small_fixture": "MakeMKV writing-application label on independently authored preservation fixture also reproduces rejection"
     }
   },
   "candidate": {
     "linux_suite": "passed",
-    "rust_tests": 99,
+    "rust_tests": 100,
     "l5_example_tests": 4,
     "clippy": "passed without warnings",
     "mac_build": "BUILD SUCCEEDED; signature verified",
@@ -40,11 +53,11 @@
     "actual_app_report_replays": 46,
     "linux_faults": {
       "kind": "synthetic-fault-injection",
-      "binary_sha256": "5a00d47f84f5d9d37e02a683497c85b05879d4681e9d901e03e479ba7f231f67",
+      "binary_sha256": "a60d20163dd1dde9055705c27f80a514ce3cc3a0ae6a2aed679d811de024f913",
       "cases": [
         {
           "case": "cancel-capture-descendants",
-          "failure_or_cancellation_seconds": 0.032,
+          "failure_or_cancellation_seconds": 0.064,
           "status": "passed"
         },
         {
@@ -59,7 +72,117 @@
         },
         {
           "case": "simultaneous-output-reservation",
-          "failure_or_cancellation_seconds": 0.53,
+          "failure_or_cancellation_seconds": 0.575,
+          "status": "passed"
+        },
+        {
+          "case": "crash-restart-refuses-stale-output",
+          "status": "passed",
+          "recovery": "Interrupted report and owned temporary files retained; restart refused"
+        },
+        {
+          "case": "leader-exit-pipe-held",
+          "failure_or_cancellation_seconds": 2.022,
+          "status": "passed"
+        },
+        {
+          "case": "extraction-io-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "conversion-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "remux-disk-full",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "decode-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "scratch-disappeared",
+          "failure_or_cancellation_seconds": 0.114,
+          "status": "passed"
+        },
+        {
+          "case": "archive-disappeared",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "replacement-readonly",
+          "failure_or_cancellation_seconds": 0.114,
+          "status": "passed"
+        },
+        {
+          "case": "report-replaced-after-validation",
+          "failure_or_cancellation_seconds": 0.114,
+          "status": "passed"
+        },
+        {
+          "case": "source-changed-before-replacement",
+          "failure_or_cancellation_seconds": 0.064,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-edit-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-injection-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-remux-io-error",
+          "failure_or_cancellation_seconds": 0.015,
+          "status": "passed"
+        },
+        {
+          "case": "checker-decode-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "repair-injection-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        }
+      ],
+      "limits": [
+        "ENOSPC/EIO are tool-boundary injections, not a real disconnected NAS.",
+        "No power-loss or uninterruptible kernel I/O guarantee."
+      ]
+    },
+    "mac_faults": {
+      "kind": "synthetic-fault-injection",
+      "binary_sha256": "9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a",
+      "cases": [
+        {
+          "case": "cancel-capture-descendants",
+          "failure_or_cancellation_seconds": 0.089,
+          "status": "passed"
+        },
+        {
+          "case": "cancel-status-descendants",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "cancel-version-probe",
+          "failure_or_cancellation_seconds": 0.047,
+          "status": "passed"
+        },
+        {
+          "case": "simultaneous-output-reservation",
+          "failure_or_cancellation_seconds": 0.576,
           "status": "passed"
         },
         {
@@ -74,167 +197,57 @@
         },
         {
           "case": "extraction-io-error",
-          "failure_or_cancellation_seconds": 0.0,
-          "status": "passed"
-        },
-        {
-          "case": "conversion-error",
-          "failure_or_cancellation_seconds": 0.016,
-          "status": "passed"
-        },
-        {
-          "case": "remux-disk-full",
-          "failure_or_cancellation_seconds": 0.015,
-          "status": "passed"
-        },
-        {
-          "case": "decode-error",
-          "failure_or_cancellation_seconds": 0.0,
-          "status": "passed"
-        },
-        {
-          "case": "scratch-disappeared",
-          "failure_or_cancellation_seconds": 0.032,
-          "status": "passed"
-        },
-        {
-          "case": "archive-disappeared",
-          "failure_or_cancellation_seconds": 0.015,
-          "status": "passed"
-        },
-        {
-          "case": "replacement-readonly",
-          "failure_or_cancellation_seconds": 0.114,
-          "status": "passed"
-        },
-        {
-          "case": "report-replaced-after-validation",
-          "failure_or_cancellation_seconds": 0.114,
-          "status": "passed"
-        },
-        {
-          "case": "source-changed-before-replacement",
-          "failure_or_cancellation_seconds": 0.114,
-          "status": "passed"
-        },
-        {
-          "case": "hybrid-edit-error",
-          "failure_or_cancellation_seconds": 0.0,
-          "status": "passed"
-        },
-        {
-          "case": "hybrid-injection-error",
-          "failure_or_cancellation_seconds": 0.032,
-          "status": "passed"
-        },
-        {
-          "case": "hybrid-remux-io-error",
-          "failure_or_cancellation_seconds": 0.032,
-          "status": "passed"
-        },
-        {
-          "case": "checker-decode-error",
-          "failure_or_cancellation_seconds": 0.0,
-          "status": "passed"
-        },
-        {
-          "case": "repair-injection-error",
-          "failure_or_cancellation_seconds": 0.015,
-          "status": "passed"
-        }
-      ],
-      "limits": [
-        "ENOSPC/EIO are tool-boundary injections, not a real disconnected NAS.",
-        "No power-loss or uninterruptible kernel I/O guarantee."
-      ]
-    },
-    "mac_faults": {
-      "kind": "synthetic-fault-injection",
-      "binary_sha256": "64cbf7bc7d455648d80afdce68724a9635fe65c09357f15294d4ad763a6f8727",
-      "cases": [
-        {
-          "case": "cancel-capture-descendants",
-          "failure_or_cancellation_seconds": 0.067,
-          "status": "passed"
-        },
-        {
-          "case": "cancel-status-descendants",
-          "failure_or_cancellation_seconds": 0.08,
-          "status": "passed"
-        },
-        {
-          "case": "cancel-version-probe",
-          "failure_or_cancellation_seconds": 0.047,
-          "status": "passed"
-        },
-        {
-          "case": "simultaneous-output-reservation",
-          "failure_or_cancellation_seconds": 0.565,
-          "status": "passed"
-        },
-        {
-          "case": "crash-restart-refuses-stale-output",
-          "status": "passed",
-          "recovery": "Interrupted report and owned temporary files retained; restart refused"
-        },
-        {
-          "case": "leader-exit-pipe-held",
-          "failure_or_cancellation_seconds": 2.044,
-          "status": "passed"
-        },
-        {
-          "case": "extraction-io-error",
-          "failure_or_cancellation_seconds": 0.038,
-          "status": "passed"
-        },
-        {
-          "case": "conversion-error",
-          "failure_or_cancellation_seconds": 0.002,
-          "status": "passed"
-        },
-        {
-          "case": "remux-disk-full",
-          "failure_or_cancellation_seconds": 0.001,
-          "status": "passed"
-        },
-        {
-          "case": "decode-error",
-          "failure_or_cancellation_seconds": 0.0,
-          "status": "passed"
-        },
-        {
-          "case": "scratch-disappeared",
-          "failure_or_cancellation_seconds": 0.068,
-          "status": "passed"
-        },
-        {
-          "case": "archive-disappeared",
-          "failure_or_cancellation_seconds": 0.0,
-          "status": "passed"
-        },
-        {
-          "case": "replacement-readonly",
-          "failure_or_cancellation_seconds": 0.04,
-          "status": "passed"
-        },
-        {
-          "case": "report-replaced-after-validation",
-          "failure_or_cancellation_seconds": 0.017,
-          "status": "passed"
-        },
-        {
-          "case": "source-changed-before-replacement",
-          "failure_or_cancellation_seconds": 0.068,
-          "status": "passed"
-        },
-        {
-          "case": "hybrid-edit-error",
           "failure_or_cancellation_seconds": 0.004,
           "status": "passed"
         },
         {
+          "case": "conversion-error",
+          "failure_or_cancellation_seconds": 0.011,
+          "status": "passed"
+        },
+        {
+          "case": "remux-disk-full",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "decode-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "scratch-disappeared",
+          "failure_or_cancellation_seconds": 0.011,
+          "status": "passed"
+        },
+        {
+          "case": "archive-disappeared",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "replacement-readonly",
+          "failure_or_cancellation_seconds": 0.011,
+          "status": "passed"
+        },
+        {
+          "case": "report-replaced-after-validation",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
+          "case": "source-changed-before-replacement",
+          "failure_or_cancellation_seconds": 0.005,
+          "status": "passed"
+        },
+        {
+          "case": "hybrid-edit-error",
+          "failure_or_cancellation_seconds": 0.0,
+          "status": "passed"
+        },
+        {
           "case": "hybrid-injection-error",
-          "failure_or_cancellation_seconds": 0.018,
+          "failure_or_cancellation_seconds": 0.0,
           "status": "passed"
         },
         {
@@ -244,7 +257,7 @@
         },
         {
           "case": "checker-decode-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.023,
           "status": "passed"
         },
         {
@@ -258,7 +271,7 @@
         "No power-loss or uninterruptible kernel I/O guarantee."
       ]
     },
-    "mac_binary_sha256": "64cbf7bc7d455648d80afdce68724a9635fe65c09357f15294d4ad763a6f8727",
+    "mac_binary_sha256": "9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a",
     "native_mac_storage": {
       "kind": "native-filesystem-failure",
       "filesystem": "isolated 16 MiB HFS+ image",
@@ -276,7 +289,34 @@
       "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34542446424",
       "linux": "passed",
       "mac_apple_silicon": "passed",
-      "publication": "not run; release gates remain pending"
+      "publication": "not run; release gates remain pending",
+      "scope": "Previous process/archive candidate; final MakeMKV correction CI pending"
+    },
+    "native_app_interruption": {
+      "kind": "native-AppModel-host-force-kill",
+      "source_retained": true,
+      "diagnostic_report_retained": true,
+      "restart": "idle; no automatic resume or false completion",
+      "supervisor_cleanup": "isolated converter and held tool stopped within 10 seconds",
+      "limits": [
+        "Uses production AppModel with an audit-only native window/entry point; does not test UI file selection.",
+        "SIGKILL does not provide ordinary cancellation; surviving job is explicitly stopped by the test supervisor."
+      ]
+    },
+    "makemkv_preservation": {
+      "linux": "passed",
+      "mac": "passed",
+      "cases": [
+        "standard conversion",
+        "hybrid target"
+      ],
+      "assertions": [
+        "picture/audio/subtitle/attachment payloads match",
+        "timestamps within 1 ms",
+        "chapter content and structure match",
+        "chapter track references and tag targets correctly remapped"
+      ],
+      "reproduction": "scripts/audit_preservation.py"
     }
   },
   "observed_limits": [
@@ -309,7 +349,7 @@
     "dv8_converter/src/main.rs": "f40573f088cac03996bf8b969ed3fd04b2835b29f3428b066592691c63361341",
     "dv8_converter/src/mediainfo.rs": "1ebdf03b0460f94174f3319c4dc80f11f225ee87ff486c02d22e7007b5dd5dfb",
     "dv8_converter/src/pq.rs": "66f2e57ebdcd0cf68c89d68502f4a76e45db54901207b4173215d53257a59bc1",
-    "dv8_converter/src/remux.rs": "cc0b12527be39b39f001315a58dc83090a53eb6fa791f51c0744863937ece00b",
+    "dv8_converter/src/remux.rs": "31a2310af45ff1493971ab71f13b0ac043ee740da71ac28e82d183b267555255",
     "dv8_converter/src/report.rs": "3720943915ac61c16bc38d96bfefa0632ad594f5a4606bf468efcc5f0785564d",
     "dv8_converter/src/runtime.rs": "5ac62d6ebf4f17a4af22962a1f41d72a5682fb9afb2ed33069290c9472fbfaa8",
     "dv8_converter/src/standard.rs": "a5d0eb038500fc2b37b8ba6879f2833d144461999f5a5dcfe26dfc74a27f0302",
@@ -322,7 +362,10 @@
     "scripts/audit_macos_storage.py": "2e2c0f338f2409e845aa3c0cc28a3394c632b8a55348afc2cff121eedaf86703",
     "macapp/DV8Maker/AppModel.swift": "fb656dc9339fb804390742a3ea8fc0f43c41f97a7e0f6a1a1db345f6c14d7a6a",
     "macapp/DV8Maker.xcodeproj/project.pbxproj": "74a6f72beffc2013c8553d7bb10dc8716bc6654d5c1aaa1cdc79fc4deca50b1a",
-    "macapp/build-macos-app.sh": "1c18ad1f7d4b42dd4c1e5142d225f31c762cee9313f6b59e4a6fb3921a8d9465"
+    "macapp/build-macos-app.sh": "1c18ad1f7d4b42dd4c1e5142d225f31c762cee9313f6b59e4a6fb3921a8d9465",
+    "scripts/audit_preservation.py": "423c8bdafaaa314f9300124026297293e6e8437f7fcb674f0cd11ec74b88bd62",
+    "scripts/audit_macos_app_crash.py": "31bf467284e6e8ed96d9ce698fa56b8868b322246518cc3d6c4b83bac04620ef",
+    "macapp/Tests/AppCrashAuditHost.swift": "e47db660eac0a667df3f222b30c07a087f7575eb9ecab53e5e9abf6a6a638187"
   },
   "local_log_sha256": {
     "dv8-stability-linux-final.log": "44efce8ff82325e438da1fd3da2427ea21a7da62af5949dc07abd074d5de4f38",
@@ -335,6 +378,18 @@
     "mac-build.log": "dd6c54e2650ebd77b1fb730a91f3a1f9bfad6d78599fee01105e90ea226f4ac5",
     "mac-candidate-v3.log": "3c388bec948c4b0963d0650e475d097c2271264cb4a7f060883e878a2d45a125",
     "mac-candidate.log": "f02cb406ecccd5df6ca0d456838f33913b94b5da4c28ad577357e4d0240b148b",
-    "mac-final.log": "f2f3297a11dbcf35c08189a7d7ffe84c814c5bc1f596b2d3243b2b59318bb298"
+    "mac-final.log": "f2f3297a11dbcf35c08189a7d7ffe84c814c5bc1f596b2d3243b2b59318bb298",
+    "linux-makemkv.log": "610e5df500814d1f0f6cd26d8b2838713e9b3a6106a98cf66c2da00d60933c92",
+    "dv8-stability-mac-makemkv.log": "5d60985d7b4cd8cf8c9557bbe603375a8dce4cbdfd58249ca730e651c99e5091",
+    "dv8-stability-build-makemkv.log": "b949b684d93515f436ba254c8c28dcdd0de727082aad978d16aca1716d010249",
+    "dv8-native-app-crash.log": "11ddfbaed96690b3fe93983170b8a105faa24ebd789efb18cd08445448d3c0ae",
+    "dv8-native-app-crash-final.log": "6954f8c8e94db93946bd4168636e36f85c42b1004d898499c0aa96c973f82b13"
+  },
+  "performance_control": {
+    "basis_commit": "71739e599efe57905719237046b710a0175a00ef",
+    "only_replaced_source": "dv8_converter/src/remux.rs",
+    "replacement_sha256": "31a2310af45ff1493971ab71f13b0ac043ee740da71ac28e82d183b267555255",
+    "purpose": "Performance comparison control with only the MakeMKV UID correction, since the unchanged baseline rejects MakeMKV inputs. Original baseline failure is retained separately.",
+    "mac_binary_sha256": "796b6c6cadc04bac50e0f7aa809e8d11b211e58ba0b18c58cf26c6c7aeb317d7"
   }
 }
