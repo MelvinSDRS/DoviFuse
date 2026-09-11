@@ -6,7 +6,18 @@
     "ram_bytes": 17179869184,
     "os": "macOS 27",
     "scratch": "Samsung T5 APFS, separate owned directory per job group",
-    "input_output": "NAS over SMB, independent disposable copies"
+    "input_output": "NAS over SMB, independent disposable copies",
+    "observed_during_reference_run": {
+      "recorded_at": "2026-09-11T00:52:29.004907+00:00",
+      "ac_system_sleep_minutes": 0,
+      "disk_sleep_minutes": 0,
+      "low_power_mode": false,
+      "nas_protocol": "SMB 3.1.1",
+      "scratch_protocol": "USB",
+      "scratch_filesystem": "APFS",
+      "scratch_solid_state": true,
+      "scratch_volume_size_bytes": 499897077760
+    }
   },
   "completed_observations": [
     {
@@ -263,6 +274,89 @@
           "name": "ffprobe",
           "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
         }
+      ]
+    },
+    {
+      "build": "corrected baseline reference",
+      "case": "full-length FEL standard conversion",
+      "input_sha256": "944d9d6e00df097494c856671b33a3e8f0a3db05d930c64ecca8b6d958d4bf7b",
+      "input_bytes": 48200052395,
+      "output_bytes": 43410480683,
+      "binary_sha256": "796b6c6cadc04bac50e0f7aa809e8d11b211e58ba0b18c58cf26c6c7aeb317d7",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 0,
+      "elapsed_seconds": 3172.313499416,
+      "peak_process_tree_rss_bytes_sampled": 635387904,
+      "peak_scratch_bytes_sampled": 82870679022,
+      "sample_interval_seconds": 0.5,
+      "samples": 5968,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "execution": "completed",
+      "validation": "warn",
+      "checks": [
+        {
+          "detail": "FEL source: conversion discards the enhancement-layer picture residual. FEL reconstruction is not preserved; the result uses the HDR10 base pictures and converted RPU.",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "enhancement_layer",
+          "label": "Profile 7 enhancement layer",
+          "status": "warn",
+          "version": 1
+        },
+        {
+          "detail": "Profile 8, HDR10 base, RPU/video frame counts, full video decode and supported container headers verified before replacing the source.",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "standard_output",
+          "label": "Converted output",
+          "status": "pass",
+          "version": 1
+        }
+      ],
+      "source_enhancement_layer": {
+        "archive_enabled": true,
+        "coverage": "all source RPUs",
+        "fel_reconstruction_preserved": false,
+        "rpu_frames": 149006,
+        "type": "FEL"
+      },
+      "scratch_estimate_bytes": 101768812544,
+      "scratch_within_estimate": true,
+      "raw_measurement_sha256": "56d0c36d060293f2ab9cd909bed55081450dd958d55244a0158e4eb37c9093da",
+      "raw_report_sha256": "4f914a485533aba34c00299773569fadcdfb4f95cf0db99601c51caad29d77e5",
+      "tools": [
+        {
+          "name": "dovi_tool",
+          "version": "dovi_tool 2.3.1"
+        },
+        {
+          "name": "mkvmerge",
+          "version": "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mkvextract",
+          "version": "mkvextract v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mediainfo",
+          "version": "MediaInfo Command line, \nMediaInfoLib - v26.05"
+        },
+        {
+          "name": "ffmpeg",
+          "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        },
+        {
+          "name": "ffprobe",
+          "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        }
+      ],
+      "limits": [
+        "Reference contains only the MakeMKV UID correction on the original baseline; it is not the final stability candidate.",
+        "A Mac rebuild and bundled regression suite overlapped initial source extraction; investigate and repeat any candidate runtime increase above 10%.",
+        "Separate output checker and candidate comparison still pending; no playback acceptance."
       ]
     }
   ],

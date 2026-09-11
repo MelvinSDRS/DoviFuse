@@ -147,6 +147,15 @@ The resumed timing comparisons use a clearly identified control built from the
 original baseline with **only the MakeMKV UID correction**; the unmodified
 baseline executable and its failed result remain preserved separately.
 
+The corrected FEL control completed in 3,172.313 seconds with full decode,
+frame/RPU and supported container checks passed before replacement. The expected
+FEL reconstruction warning remains. Sampled process-tree RSS peaked at
+635,387,904 bytes and scratch at 82,870,679,022 bytes, below the
+101,768,812,544-byte estimate. No scratch files or child processes remained.
+The separate checker and final-candidate comparison are still required. A Mac
+build and regression suite overlapped initial extraction; retain that context
+when assessing runtime differences.
+
 ## Action plan status
 
 | Work | Evidence and next acceptance step |
@@ -154,11 +163,11 @@ baseline executable and its failed result remain preserved separately.
 | Reproducible baseline | Complete: preserved executables, source hashes, Linux/Mac suites, independent media-copy checksums and hardware/storage record. |
 | Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 100 Rust tests, MakeMKV preservation controls and 46 actual app report replays. |
 | Native app interruption | Passed in an isolated native host using production AppModel: source/report retained, restart idle without false success, orphaned test job explicitly stopped by supervisor. UI file selection is outside this control. |
-| Full-length resource/performance matrix | P8 checker pair complete. FEL baseline exposed MakeMKV rejection; corrected-control comparisons have restarted. Standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
+| Full-length resource/performance matrix | P8 checker pair complete. FEL baseline exposed MakeMKV rejection; corrected FEL standard control completed with expected FEL warning and no leftover resources. Standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
 | Independent hybrid reference coverage | Pending: same-source positive controls cannot establish independent WEB/Blu-ray grade equivalence. Retain conservative grade, alignment and L5 refusals. |
 | Dolby playback QC | Pending user observations on Apple TV 4K / Infuse / LG C1 over SMB, with output identities and timestamps. |
-| Hosted CI | Passed for previous candidate `343e5f36691ff9cf594cbbf890c2fedb3c828cbc`, [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34542446424). Final MakeMKV correction run pending. |
-| Mac installation | Candidate `c355606` installed, signed, smoke-tested and relaunched on the Mac at 20:17 EDT, with preserved rollback. Converter SHA-256 `9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a`. |
+| Hosted CI | Passed for final code candidate `cb4544d9ee2b576f53084dee23fc53892346c205`: [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34546967687), including MKVToolNix 82/100 preservation controls. |
+| Mac installation | Final code candidate `cb4544d` installed after the active conversion finished, signed, passed 22 installed smoke cases and relaunched at 21:11 EDT, with preserved rollback. Converter SHA-256 `735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb`. Test queue resumed afterward. |
 | Publication | Blocked by pending full-length and Dolby playback release gates. |
 
 ## Playback and release

@@ -285,12 +285,11 @@
     "archive_cancellation": "Unit regression cancels after copying begins, removes partial archive, preserves source and retries successfully; native ENOSPC/retry passed",
     "swift_concurrency": "Explicit Swift 6 / complete concurrency checking; 46 actual report replays passed after per-callback weak-capture fix",
     "hosted_ci": {
-      "commit": "343e5f36691ff9cf594cbbf890c2fedb3c828cbc",
-      "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34542446424",
+      "commit": "cb4544d9ee2b576f53084dee23fc53892346c205",
+      "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34546967687",
       "linux": "passed",
       "mac_apple_silicon": "passed",
-      "publication": "not run; release gates remain pending",
-      "scope": "Previous process/archive candidate; final MakeMKV correction CI pending"
+      "publication": "not run; release gates remain pending"
     },
     "native_app_interruption": {
       "kind": "native-AppModel-host-force-kill",
@@ -319,19 +318,22 @@
       "reproduction": "scripts/audit_preservation.py"
     },
     "installation": {
-      "candidate_commit": "c355606bb16241786cb51173780610e108529be3",
+      "candidate_commit": "cb4544d9ee2b576f53084dee23fc53892346c205",
       "status": "installed, signature verified, smoke tests passed and app relaunched",
-      "installed_converter_sha256": "9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a",
-      "installed_app_executable_sha256": "5cf607ec38f207827fed6e35677adb74431c5bf4b66501f975de9042249fcdda",
-      "smoke_log_sha256": "cb603b4310c4e8d4f911a1819d8bb6ec43c2c929b89be9faa352980b321ec48b",
+      "installed_converter_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
+      "installed_app_executable_sha256": "cd4eb47f8294136f6ade64bdc8dd9a134d7fae32360a9a99cb58b9dff147e56b",
+      "smoke_log_sha256": "5adc0889187cac599f5f021f9b3f56a24ddb662320c95ce69046f6553eb40191",
       "app_pids": [
-        59162
+        79739
       ],
       "signature": "passed deep strict after smoke tests",
-      "installed_at": "2026-09-10T20:17:34-0400",
+      "installed_at": "2026-09-10T21:11:40-0400",
       "rollback_preserved": true,
-      "installed_location": "user Applications/DV8 Maker.app"
-    }
+      "installed_location": "user Applications/DV8 Maker.app",
+      "installed_smoke_cases": 22
+    },
+    "latest_verified_mac_binary_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
+    "latest_verified_mac_binary_status": "Built, full bundled Mac suite passed, installed with rollback, signed, 22 installed smoke cases passed and app relaunched"
   },
   "observed_limits": [
     "Synthetic fixtures validate mechanics, not creative grade equivalence.",
@@ -363,7 +365,7 @@
     "dv8_converter/src/main.rs": "f40573f088cac03996bf8b969ed3fd04b2835b29f3428b066592691c63361341",
     "dv8_converter/src/mediainfo.rs": "1ebdf03b0460f94174f3319c4dc80f11f225ee87ff486c02d22e7007b5dd5dfb",
     "dv8_converter/src/pq.rs": "66f2e57ebdcd0cf68c89d68502f4a76e45db54901207b4173215d53257a59bc1",
-    "dv8_converter/src/remux.rs": "31a2310af45ff1493971ab71f13b0ac043ee740da71ac28e82d183b267555255",
+    "dv8_converter/src/remux.rs": "5f4314c14d828559c4b5dcdb9f94cefc9931714c2fc65de42892705b13083a2f",
     "dv8_converter/src/report.rs": "3720943915ac61c16bc38d96bfefa0632ad594f5a4606bf468efcc5f0785564d",
     "dv8_converter/src/runtime.rs": "5ac62d6ebf4f17a4af22962a1f41d72a5682fb9afb2ed33069290c9472fbfaa8",
     "dv8_converter/src/standard.rs": "a5d0eb038500fc2b37b8ba6879f2833d144461999f5a5dcfe26dfc74a27f0302",
@@ -377,7 +379,7 @@
     "macapp/DV8Maker/AppModel.swift": "fb656dc9339fb804390742a3ea8fc0f43c41f97a7e0f6a1a1db345f6c14d7a6a",
     "macapp/DV8Maker.xcodeproj/project.pbxproj": "74a6f72beffc2013c8553d7bb10dc8716bc6654d5c1aaa1cdc79fc4deca50b1a",
     "macapp/build-macos-app.sh": "1c18ad1f7d4b42dd4c1e5142d225f31c762cee9313f6b59e4a6fb3921a8d9465",
-    "scripts/audit_preservation.py": "423c8bdafaaa314f9300124026297293e6e8437f7fcb674f0cd11ec74b88bd62",
+    "scripts/audit_preservation.py": "8e28f036dfa684581a7019aafa43feda0ab5df650068086e9af01600e8b649e9",
     "scripts/audit_macos_app_crash.py": "31bf467284e6e8ed96d9ce698fa56b8868b322246518cc3d6c4b83bac04620ef",
     "macapp/Tests/AppCrashAuditHost.swift": "e47db660eac0a667df3f222b30c07a087f7575eb9ecab53e5e9abf6a6a638187"
   },
@@ -397,7 +399,11 @@
     "dv8-stability-mac-makemkv.log": "5d60985d7b4cd8cf8c9557bbe603375a8dce4cbdfd58249ca730e651c99e5091",
     "dv8-stability-build-makemkv.log": "b949b684d93515f436ba254c8c28dcdd0de727082aad978d16aca1716d010249",
     "dv8-native-app-crash.log": "11ddfbaed96690b3fe93983170b8a105faa24ebd789efb18cd08445448d3c0ae",
-    "dv8-native-app-crash-final.log": "6954f8c8e94db93946bd4168636e36f85c42b1004d898499c0aa96c973f82b13"
+    "dv8-native-app-crash-final.log": "6954f8c8e94db93946bd4168636e36f85c42b1004d898499c0aa96c973f82b13",
+    "hosted-compat-final.log": "3ebd5e7f4f36b330d2786bbe0f963e3a755ea46ba2be8dd68ec25570d7a64c15",
+    "dv8-stability-build-compat.log": "d9a0c39e469293e0b45c56312a2734d818f5bbf047469eeb237829d59e6e03ea",
+    "dv8-stability-mac-compat.log": "f44a2ae023e69e6f5079b22348ca32f9d0ebc2b97114e4042eb910914d99bb55",
+    "installed-smoke-compat.log": "5adc0889187cac599f5f021f9b3f56a24ddb662320c95ce69046f6553eb40191"
   },
   "performance_control": {
     "basis_commit": "71739e599efe57905719237046b710a0175a00ef",
