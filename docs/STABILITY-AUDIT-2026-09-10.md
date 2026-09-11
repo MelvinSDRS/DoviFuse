@@ -89,7 +89,7 @@ failures from the prior bundle. Set `DV8_AUDIT_SMB_ROOT` when running the comple
 Mac suite to include these controls and their app report replays. The script
 creates only a new disposable subdirectory on an already mounted SMB share.
 Hosted CI has no connection to the private NAS; native SMB evidence comes from
-the user's Mac. The fixed Linux and Mac suites passed, including 102 Rust tests, all three native SMB cases and 49 Mac app report replays. The full-length retry remains pending; see [SMB evidence](evidence/2026-09-10-smb-sync.json).
+the user's Mac. The fixed Linux and Mac suites passed, including 102 Rust tests, all three native SMB cases and 49 Mac app report replays. The full-length FEL retry subsequently completed with the expected FEL warning, and its separate checker passed. See [SMB evidence](evidence/2026-09-10-smb-sync.json) and the full-length observations below.
 
 ## Reproducible verification
 
@@ -136,7 +136,8 @@ disconnect. Directory removal and permission changes affect only owned test
 directories. The Mac suite additionally fills an isolated 16 MiB HFS+ disk image
 to actual ENOSPC: archive failure retains the source, removes the partial archive,
 and succeeds on retry after the owned fill file is removed. Both reports are
-replayed through the app, bringing the final replay count to 46.
+replayed through the app, bringing the hosted replay count to 46. The three
+additional native SMB controls bring the user-Mac replay count to 49.
 
 SIGKILL leaves a running/inconclusive report and owned temporary
 files; a subsequent job refuses them. It does not automatically resume or erase
@@ -205,9 +206,29 @@ FEL reconstruction warning remains. Sampled process-tree RSS peaked at
 The separate checker also passed in 1,502.300 seconds: 149,006 frames fully
 decoded, with all 239 detected picture cuts matched at offset zero (18% of RPU
 cuts; dominance 14.1). Its sampled RSS peaked at 685,146,112 bytes and scratch at
-24,587,099 bytes, with no leftovers or children. The final-candidate comparison
-is still required. A Mac build and regression suite overlapped the standard
-control's initial extraction; retain that context when assessing runtime differences.
+24,587,099 bytes, with no leftovers or children. A Mac build and regression suite
+overlapped the standard control's initial extraction; retain that context when
+assessing runtime differences.
+
+The final SMB-fixed candidate completed the same FEL conversion in 3,135.125
+seconds, with full decode, frame/RPU and supported container checks passed before
+replacement. All 149,006 source RPUs were classified as FEL; the expected residual
+reconstruction warning remains. Sampled RSS peaked at 688,209,920 bytes and scratch
+at 82,870,679,022 bytes, within the 101,768,812,544-byte estimate. No scratch files
+or child processes remained. The observed runtime was 1.17% below the corrected
+reference, with 8.31% higher sampled peak RSS; this single comparison does not
+establish a speedup or universal memory bound. The earlier SMB failure and
+unchanged-input checksum evidence remain preserved separately.
+
+The separate candidate checker passed in 1,503.882 seconds, 0.11% above the
+reference. It decoded all 149,006 frames and matched all 239 detected picture
+cuts at offset zero (18% of RPU cuts; dominance 14.1). Sampled RSS peaked at
+672,907,264 bytes and scratch at 24,587,099 bytes; no scratch or child processes
+remained. The input's filesystem identity stayed unchanged across the checker.
+The output SHA-256 is recorded in the measurement evidence, and post-hash
+filesystem identity matches the checker report. The FEL candidate is ready for
+user playback QC; actual observations remain pending. The MEL reference run has
+started using the same T5/NAS arrangement.
 
 ## Action plan status
 
@@ -216,7 +237,7 @@ control's initial extraction; retain that context when assessing runtime differe
 | Reproducible baseline | Complete: preserved executables, source hashes, Linux/Mac suites, independent media-copy checksums and hardware/storage record. |
 | Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 102 Rust tests, MakeMKV preservation controls, three native SMB archive/report controls and 49 actual app report replays. |
 | Native app interruption | Passed in an isolated native host using production AppModel: source/report retained, restart idle without false success, orphaned test job explicitly stopped by supervisor. UI file selection is outside this control. |
-| Full-length resource/performance matrix | P8 checker pair complete. FEL baseline exposed MakeMKV rejection; corrected FEL standard and output checker controls completed with no leftover resources; only the standard report carries the expected FEL warning. The first FEL candidate failed archive synchronization on SMB with its input intact; the fix passed native regressions and requires a full retry. Standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
+| Full-length resource/performance matrix | P8 checker pair and FEL standard/checker comparisons complete. SMB-fixed FEL conversion took 3,135.125 seconds and its passing checker 1,503.882 seconds, within scratch estimates and without leftover resources; only the standard report carries the expected FEL warning. MEL standard/checker, same-source P7/P8 hybrid pairs, independent-pair assessment and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
 | Independent hybrid reference coverage | Pending: same-source positive controls cannot establish independent WEB/Blu-ray grade equivalence. Retain conservative grade, alignment and L5 refusals. |
 | Dolby playback QC | Pending user observations on Apple TV 4K / Infuse / LG C1 over SMB, with output identities and timestamps. |
 | Hosted CI | Passed for SMB sync code candidate `463802d60d922b7c4df4d46bf69c67197d67985d`: [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34554003264), with 102 Rust tests and 46 hosted app replays. Three native SMB controls and 49 replays additionally passed on the user Mac. |

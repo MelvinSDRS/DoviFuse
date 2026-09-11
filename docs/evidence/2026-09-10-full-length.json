@@ -356,7 +356,7 @@
       "limits": [
         "Reference contains only the MakeMKV UID correction on the original baseline; it is not the final stability candidate.",
         "A Mac rebuild and bundled regression suite overlapped initial source extraction; investigate and repeat any candidate runtime increase above 10%.",
-        "Separate output checker and candidate comparison still pending; no playback acceptance."
+        "Separate output checker and candidate conversion/checker comparisons completed; no playback acceptance."
       ],
       "expected_archive_artifacts": [
         {
@@ -494,9 +494,240 @@
         }
       ],
       "limits": [
-        "Checks the reference output; candidate conversion/checker comparison and physical playback still pending.",
+        "Checks the reference output; candidate conversion/checker comparisons completed, physical playback still pending.",
         "239 detected picture cuts matched at offset zero; this covers 18% of the RPU cuts and does not establish visual grade equivalence."
       ]
+    },
+    {
+      "build": "candidate after SMB sync correction",
+      "case": "full-length FEL standard conversion",
+      "input_sha256": "944d9d6e00df097494c856671b33a3e8f0a3db05d930c64ecca8b6d958d4bf7b",
+      "input_bytes": 48200052395,
+      "output_bytes": 43410480683,
+      "binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 0,
+      "elapsed_seconds": 3135.1248542499998,
+      "peak_process_tree_rss_bytes_sampled": 688209920,
+      "peak_scratch_bytes_sampled": 82870679022,
+      "sample_interval_seconds": 0.5,
+      "samples": 5904,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "execution": "completed",
+      "validation": "warn",
+      "checks": [
+        {
+          "detail": "FEL source: conversion discards the enhancement-layer picture residual. FEL reconstruction is not preserved; the result uses the HDR10 base pictures and converted RPU.",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "enhancement_layer",
+          "label": "Profile 7 enhancement layer",
+          "status": "warn",
+          "version": 1
+        },
+        {
+          "detail": "Profile 8, HDR10 base, RPU/video frame counts, full video decode and supported container headers verified before replacing the source.",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "standard_output",
+          "label": "Converted output",
+          "status": "pass",
+          "version": 1
+        }
+      ],
+      "source_enhancement_layer": {
+        "archive_enabled": true,
+        "coverage": "all source RPUs",
+        "fel_reconstruction_preserved": false,
+        "rpu_frames": 149006,
+        "type": "FEL"
+      },
+      "scratch_estimate_bytes": 101768812544,
+      "scratch_within_estimate": true,
+      "raw_measurement_sha256": "278afbb07e71606114a879ed2f1af189db1aa34dea853800c6bcefa7960d7858",
+      "raw_report_sha256": "02570a5fc47fc125d1d95590b57390febad248d64b1a2e060c12948a56558979",
+      "tools": [
+        {
+          "name": "dovi_tool",
+          "version": "dovi_tool 2.3.1"
+        },
+        {
+          "name": "mkvmerge",
+          "version": "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mkvextract",
+          "version": "mkvextract v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mediainfo",
+          "version": "MediaInfo Command line, \nMediaInfoLib - v26.05"
+        },
+        {
+          "name": "ffmpeg",
+          "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        },
+        {
+          "name": "ffprobe",
+          "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        }
+      ],
+      "limits": [
+        "Reference has only the MakeMKV UID correction on the original baseline and overlapped a Mac build/suite during initial extraction; the timing difference is not a controlled speedup claim.",
+        "Separate candidate output checker passed; actual playback observations still pending.",
+        "Resource peaks are sampled; the archive byte count is a stat observation, not a payload checksum."
+      ],
+      "expected_archive_artifacts": [
+        {
+          "role": "source EL and RPU HEVC archive",
+          "bytes": 4551520707,
+          "observation": "Expected archive present after successful conversion; this stat observation is not a payload hash"
+        }
+      ],
+      "source_commit": "463802d60d922b7c4df4d46bf69c67197d67985d",
+      "run": "fel-candidate-standard-smbfix",
+      "elapsed_difference_percent_vs_corrected_reference": -1.172287832613217,
+      "peak_rss_difference_percent_vs_corrected_reference": 8.313349320543573,
+      "output_sha256": "cdc30830a6cda3b050ea863a3dc2e049209a571ce1d86892a18f321691ba7f43"
+    },
+    {
+      "build": "candidate after SMB sync correction",
+      "case": "full-length FEL output checker",
+      "input_origin": "Output of SMB-fixed candidate FEL standard conversion; unchanged filesystem identity across checker retained in raw report",
+      "input_bytes": 43410480683,
+      "binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 0,
+      "elapsed_seconds": 1503.881708875,
+      "peak_process_tree_rss_bytes_sampled": 672907264,
+      "peak_scratch_bytes_sampled": 24587099,
+      "sample_interval_seconds": 0.5,
+      "samples": 2813,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "execution": "completed",
+      "validation": "pass",
+      "checks": [
+        {
+          "detail": "Container is readable and contains an HEVC video track",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "container",
+          "label": "Matroska / HEVC structure",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Profile 8 detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "profile",
+          "label": "Dolby Vision profile",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "10-bit BT.2020, PQ \u2014 HDR10 / HDR10",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "hdr10",
+          "label": "HDR10 base layer",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Parsed 149006 RPU frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "rpu",
+          "label": "Dolby Vision RPU",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Video and RPU both contain 149006 frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "frames",
+          "label": "Frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Decoded 149006 video frames; RPU contains 149006",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decoded_frames",
+          "label": "Decoded frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Entire video decoded successfully; 239 scene changes detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decode",
+          "label": "Full video decode",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "RPU and video scene changes align at offset 0 (239 matches, 18% of RPU cuts, dominance 14.1)",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "sync",
+          "label": "Metadata sync",
+          "status": "pass",
+          "version": 1
+        }
+      ],
+      "raw_measurement_sha256": "32052317237b765731554d7a8c7099bd5755d0c7d31d06ec9249bb2369e51f38",
+      "raw_report_sha256": "ebc4faf752051e11f6a5f52ba9929ae7759f9495b39bdb570233981c325d217c",
+      "tools": [
+        {
+          "name": "dovi_tool",
+          "version": "dovi_tool 2.3.1"
+        },
+        {
+          "name": "mkvmerge",
+          "version": "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mkvextract",
+          "version": "mkvextract v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mediainfo",
+          "version": "MediaInfo Command line, \nMediaInfoLib - v26.05"
+        },
+        {
+          "name": "ffmpeg",
+          "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        },
+        {
+          "name": "ffprobe",
+          "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        }
+      ],
+      "limits": [
+        "239 detected picture cuts matched at offset zero; this covers 18% of RPU cuts and does not establish visual grade equivalence.",
+        "Final output checksum recorded after checker; filesystem identity rechecked against its report. Actual playback observations remain pending."
+      ],
+      "source_commit": "463802d60d922b7c4df4d46bf69c67197d67985d",
+      "run": "fel-candidate-check-smbfix",
+      "elapsed_difference_percent_vs_corrected_reference": 0.10527887341054143,
+      "input_sha256": "cdc30830a6cda3b050ea863a3dc2e049209a571ce1d86892a18f321691ba7f43"
     }
   ],
   "elapsed_difference_percent": -0.09346425031699912,
@@ -547,5 +778,17 @@
       "remaining_scratch_bytes": 0,
       "surviving_pids": []
     }
-  ]
+  ],
+  "playback_handoff": {
+    "case": "full-length FEL standard conversion",
+    "output_sha256": "cdc30830a6cda3b050ea863a3dc2e049209a571ce1d86892a18f321691ba7f43",
+    "output_bytes": 43410480683,
+    "automated_checks": "passed; expected FEL residual limitation remains",
+    "observations": "pending user playback",
+    "seek_points": [
+      "00:01:00",
+      "00:51:47",
+      "01:42:34"
+    ]
+  }
 }
