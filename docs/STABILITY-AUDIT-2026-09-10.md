@@ -4,6 +4,11 @@ Baseline: `71739e599efe57905719237046b710a0175a00ef`. Work branch:
 `codex/stability-audit`. Profile 5 remains unsupported, including overrides;
 the experimental branch is not merged.
 
+**Stopped at the user's request on 11 September 2026.** All media jobs and
+queued workers have exited. Completed evidence is retained; remaining acceptance
+work is deferred. See the [handoff and remaining work](STABILITY-HANDOFF-2026-09-11.md)
+before explicitly resuming. Both outstanding release gates remain pending.
+
 ## Reproduced problems and repairs
 
 The unchanged converter exceeded the ten-second cancellation deadline when a
@@ -227,8 +232,16 @@ cuts at offset zero (18% of RPU cuts; dominance 14.1). Sampled RSS peaked at
 remained. The input's filesystem identity stayed unchanged across the checker.
 The output SHA-256 is recorded in the measurement evidence, and post-hash
 filesystem identity matches the checker report. The FEL candidate is ready for
-user playback QC; actual observations remain pending. The MEL reference run has
-started using the same T5/NAS arrangement.
+user playback QC. The user reports Dolby Vision activation, good colors, clean
+scene transitions, and working audio/subtitles, and confirmed ten-minute continuity,
+all three planned seeks, dark gradients, bright highlights, and both required
+playback settings. These passed viewing checks apply only to this output;
+changing-aspect-ratio coverage remains unestablished. See [playback evidence](evidence/2026-09-11-playback.json).
+The MEL reference run was cancelled at the user's request during source HEVC
+extraction after 1,503.531 seconds. It stopped in 0.734 seconds, retained the
+source's filesystem identity, and left no scratch or media processes. Its
+cancelled/inconclusive report is preserved; MEL acceptance remains unfinished.
+See [stop evidence](evidence/2026-09-11-user-stop.json).
 
 ## Action plan status
 
@@ -239,7 +252,7 @@ started using the same T5/NAS arrangement.
 | Native app interruption | Passed in an isolated native host using production AppModel: source/report retained, restart idle without false success, orphaned test job explicitly stopped by supervisor. UI file selection is outside this control. |
 | Full-length resource/performance matrix | P8 checker pair and FEL standard/checker comparisons complete. SMB-fixed FEL conversion took 3,135.125 seconds and its passing checker 1,503.882 seconds, within scratch estimates and without leftover resources; only the standard report carries the expected FEL warning. MEL standard/checker, same-source P7/P8 hybrid pairs, independent-pair assessment and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
 | Independent hybrid reference coverage | Pending: same-source positive controls cannot establish independent WEB/Blu-ray grade equivalence. Retain conservative grade, alignment and L5 refusals. |
-| Dolby playback QC | Pending user observations on Apple TV 4K / Infuse / LG C1 over SMB, with output identities and timestamps. |
+| Dolby playback QC | FEL reported viewing checks passed, including continuity/seeks/dark/highlight checks and enabled playback settings. MEL/P7/P8 observations and changing-aspect-ratio coverage remain pending. |
 | Hosted CI | Passed for SMB sync code candidate `463802d60d922b7c4df4d46bf69c67197d67985d`: [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34554003264), with 102 Rust tests and 46 hosted app replays. Three native SMB controls and 49 replays additionally passed on the user Mac. |
 | Mac installation | SMB sync fix `463802d` installed after idleness, signed, passed 22 installed smoke cases and relaunched at 22:18 EDT, with preserved rollback. Converter SHA-256 `67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64`. Full-length retry explicitly restarted after input checksum/identity verification; failed reports retained separately. |
 | Publication | Blocked by pending full-length and Dolby playback release gates. |

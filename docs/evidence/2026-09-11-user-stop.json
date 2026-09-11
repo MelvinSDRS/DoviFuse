@@ -1,0 +1,24 @@
+{
+  "reason": "User requested stop, commit and handoff; remaining audit deferred",
+  "case": "MEL corrected-reference standard conversion",
+  "stage": "source HEVC extraction",
+  "execution": "cancelled",
+  "validation": "inconclusive",
+  "source_retention": "Before/after filesystem identities unchanged; no new full source checksum performed at stop",
+  "source_bytes": 86450963255,
+  "original_input_sha256": "f51a8d5ebf310a278cee94f7063a9c0aa09d06c060dce361fcfe4559e84ff1f5",
+  "seconds_to_stop": 0.734446083,
+  "forced_termination": false,
+  "remaining_scratch_bytes": 0,
+  "surviving_pids": [],
+  "elapsed_seconds_before_stop": 1503.530618625,
+  "sampled_peak_scratch_bytes_before_stop": 65684473090,
+  "sampled_peak_rss_bytes_before_stop": 68091904,
+  "raw_measurement_sha256": "daa34a389305026b99693c33794e20f7bb467b812eef677b0dcb6fcf5be244e1",
+  "raw_report_sha256": "025fe29562e03a35e6f1a4c5e298855cc5f6648aa1dc764ce2f7a376d45c6260",
+  "limits": [
+    "Interrupted reference run is not a completed MEL performance result.",
+    "This manual cancellation during source extraction does not replace the planned candidate decode/archive cancellation matrix.",
+    "Queued controllers exited and no automatic resume is authorized."
+  ]
+}

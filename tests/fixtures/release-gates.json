@@ -11,7 +11,14 @@
       "id": "dolby-playback-qc",
       "status": "pending",
       "required_evidence": "Manual Dolby-capable playback for highlights, dark scenes, sync and aspect ratio changes.",
-      "evidence": []
+      "evidence": [
+        {
+          "path": "docs/evidence/2026-09-11-playback.json",
+          "sha256": "c4ec7655715be0689f3e8c857fb93a849ff06f42ffe8d8e779ed1b1aa739b618",
+          "reviewer": "User observations recorded by Codex",
+          "method": "User-confirmed FEL viewing checks passed: content-matched Dolby Vision, colors, scene transitions, audio/subtitles, ten-minute continuity, three specified seeks, dark gradients and bright highlights. Both required playback settings enabled. MEL/P7/P8 playback and changing-aspect-ratio coverage remain pending."
+        }
+      ]
     },
     {
       "id": "container-preservation",

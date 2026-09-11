@@ -3,7 +3,8 @@
 Setup supplied by the user: **Apple TV 4K → Infuse → LG C1; NAS through SMB**.
 Versions/settings supplied by the user: **tvOS 27 Golden Master, Infuse 8.5.3,
 LG C1 firmware 03.53.45, Cinema picture mode**.
-Status: **pending actual playback observations**.
+Status: **FEL reported viewing checks passed; remaining workflow and
+changing-aspect-ratio coverage pending**. See the [recorded user observations](evidence/2026-09-11-playback.json).
 
 For each output, record in the private audit folder:
 

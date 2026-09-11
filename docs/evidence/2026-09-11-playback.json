@@ -1,0 +1,61 @@
+{
+  "recorded_at_utc": "2026-09-11T03:54:17.369754+00:00",
+  "status": "FEL reported viewing checks passed; remaining workflow and aspect-ratio coverage pending",
+  "setup": {
+    "device": "Apple TV 4K, generation unspecified",
+    "tvOS": "27 Golden Master",
+    "player": "Infuse 8.5.3",
+    "display": "LG C1",
+    "firmware": "03.53.45",
+    "picture_mode": "Cinema",
+    "transport": "NAS via SMB",
+    "match_dynamic_range": "enabled, confirmed by user",
+    "infuse_profile8_dolby_vision": "enabled, confirmed by user"
+  },
+  "cases": [
+    {
+      "case": "standard FEL conversion",
+      "output_sha256": "cdc30830a6cda3b050ea863a3dc2e049209a571ce1d86892a18f321691ba7f43",
+      "output_bytes": 43410480683,
+      "converter_source_commit": "463802d60d922b7c4df4d46bf69c67197d67985d",
+      "converter_binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
+      "reported_by": "user",
+      "verbatim_observation": "dolby vision is well triggered, colors looks good, scenes changing are clean too, same for audio and subtitles",
+      "observations": {
+        "dolby_vision_activation": "passed, reported triggered with both content-matching and Profile 8 settings enabled",
+        "colors": "reported good in viewed material",
+        "scene_transitions": "reported clean",
+        "audio": "reported good",
+        "subtitles": "reported good",
+        "ten_minute_continuity": "passed, confirmed by user",
+        "three_planned_seeks": "passed, 00:01:00 / 00:51:47 / 01:42:34 confirmed by user",
+        "dark_gradients": "passed, confirmed by user",
+        "bright_highlights": "passed, confirmed by user",
+        "letterbox_aspect_ratio_changes": "not separately confirmed"
+      },
+      "issue_timestamps": [],
+      "issue_timestamp_scope": "No problem or uncertain timestamp reported for the confirmed checks.",
+      "scope": "User observations for this FEL output only; no MEL or hybrid playback acceptance. FEL residual reconstruction remains unsupported.",
+      "followup_confirmations": [
+        {
+          "question_scope": "Ten uninterrupted minutes, seeks at 00:01:00 / 00:51:47 / 01:42:34, dark gradients and bright highlights",
+          "answer": "Yes, all checked and good"
+        },
+        {
+          "question_scope": "Apple TV Match Dynamic Range and Infuse Profile 8 Dolby Vision setting",
+          "answer": "Both enabled"
+        }
+      ],
+      "status": "passed reported viewing checks; changing-aspect-ratio coverage not established"
+    }
+  ],
+  "remaining_cases": [
+    "standard MEL",
+    "P7 hybrid",
+    "P8 hybrid"
+  ],
+  "release_gate": "pending",
+  "remaining_coverage": [
+    "Observed letterbox/aspect-ratio transitions where representative media provides them"
+  ]
+}

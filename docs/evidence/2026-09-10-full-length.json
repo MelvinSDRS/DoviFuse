@@ -494,7 +494,7 @@
         }
       ],
       "limits": [
-        "Checks the reference output; candidate conversion/checker comparisons completed, physical playback still pending.",
+        "Checks the reference output; candidate conversion/checker comparisons completed. User playback observations apply to the candidate, not this reference output.",
         "239 detected picture cuts matched at offset zero; this covers 18% of the RPU cuts and does not establish visual grade equivalence."
       ]
     },
@@ -577,7 +577,7 @@
       ],
       "limits": [
         "Reference has only the MakeMKV UID correction on the original baseline and overlapped a Mac build/suite during initial extraction; the timing difference is not a controlled speedup claim.",
-        "Separate candidate output checker passed; actual playback observations still pending.",
+        "Separate candidate output checker and user-reported viewing checks passed; changing-aspect-ratio coverage remains unestablished.",
         "Resource peaks are sampled; the archive byte count is a stat observation, not a payload checksum."
       ],
       "expected_archive_artifacts": [
@@ -722,7 +722,7 @@
       ],
       "limits": [
         "239 detected picture cuts matched at offset zero; this covers 18% of RPU cuts and does not establish visual grade equivalence.",
-        "Final output checksum recorded after checker; filesystem identity rechecked against its report. Actual playback observations remain pending."
+        "Final output checksum recorded after checker; filesystem identity rechecked against its report. User-reported viewing checks passed; see separate playback evidence for scope and remaining coverage."
       ],
       "source_commit": "463802d60d922b7c4df4d46bf69c67197d67985d",
       "run": "fel-candidate-check-smbfix",
@@ -735,7 +735,7 @@
     "P8 checker candidate predates the archive-only Rust change; checker code was unchanged by that change. Binary identities are recorded separately.",
     "Initial baseline overlapped media-copy I/O; these observations are not a controlled statistical benchmark or a speedup claim.",
     "Resource peaks are process-tree RSS and file sizes sampled every 0.5 seconds.",
-    "No manual Dolby playback observations received.",
+    "FEL candidate user-reported viewing checks passed; MEL/P7/P8 playback and changing-aspect-ratio coverage remain pending.",
     "Queued same-source P7/P8 hybrid controls test mechanics and performance; independent donor/target grade acceptance remains separate."
   ],
   "comparison_input_checks": [
@@ -784,11 +784,19 @@
     "output_sha256": "cdc30830a6cda3b050ea863a3dc2e049209a571ce1d86892a18f321691ba7f43",
     "output_bytes": 43410480683,
     "automated_checks": "passed; expected FEL residual limitation remains",
-    "observations": "pending user playback",
+    "observations": "User-reported viewing checks passed; see docs/evidence/2026-09-11-playback.json for exact scope and remaining coverage.",
     "seek_points": [
       "00:01:00",
       "00:51:47",
       "01:42:34"
     ]
+  },
+  "audit_state": {
+    "status": "stopped at user request",
+    "date": "2026-09-11",
+    "automatic_resume": false,
+    "interrupted_case": "MEL corrected-reference standard conversion",
+    "stop_evidence": "docs/evidence/2026-09-11-user-stop.json",
+    "handoff": "docs/STABILITY-HANDOFF-2026-09-11.md"
   }
 }
