@@ -317,6 +317,20 @@
         "chapter track references and tag targets correctly remapped"
       ],
       "reproduction": "scripts/audit_preservation.py"
+    },
+    "installation": {
+      "candidate_commit": "c355606bb16241786cb51173780610e108529be3",
+      "status": "installed, signature verified, smoke tests passed and app relaunched",
+      "installed_converter_sha256": "9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a",
+      "installed_app_executable_sha256": "5cf607ec38f207827fed6e35677adb74431c5bf4b66501f975de9042249fcdda",
+      "smoke_log_sha256": "cb603b4310c4e8d4f911a1819d8bb6ec43c2c929b89be9faa352980b321ec48b",
+      "app_pids": [
+        59162
+      ],
+      "signature": "passed deep strict after smoke tests",
+      "installed_at": "2026-09-10T20:17:34-0400",
+      "rollback_preserved": true,
+      "installed_location": "user Applications/DV8 Maker.app"
     }
   },
   "observed_limits": [
