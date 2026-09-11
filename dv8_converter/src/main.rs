@@ -1,4 +1,7 @@
+mod cancellation;
+mod checker;
 mod cli;
+mod enhancement;
 mod exec;
 mod ffmpeg;
 mod fsutil;
@@ -6,6 +9,8 @@ mod hybrid;
 mod logger;
 mod mediainfo;
 mod pq;
+mod remux;
+mod report;
 mod runtime;
 mod standard;
 
@@ -31,8 +36,8 @@ fn absolutize(p: &PathBuf) -> PathBuf {
     p.clone()
 }
 
-fn run(cli: CliArgs) -> AppResult<()> {
-    let (rt, logger) = build_runtime(&cli)?;
+fn run(cli: &CliArgs, rt: runtime::Runtime, logger: logger::Logger) -> AppResult<()> {
+    logger.job_started(cli.operation());
 
     logger.log(&format!(
         "Running script with arguments: {}",
@@ -47,6 +52,32 @@ fn run(cli: CliArgs) -> AppResult<()> {
     logger.log(&format!("output_dir: {}", rt.output_dir.display()));
     logger.log(&format!("save_el_rpu: {}", rt.save_el_rpu));
     logger.log(&format!("DRY_RUN: {}", rt.dry_run));
+
+    if let Some(offset) = cli.repair_sync_offset {
+        let input = cli
+            .input_path
+            .as_ref()
+            .map(absolutize)
+            .ok_or_else(|| "No repair input provided".to_string())?;
+        let custom_output = cli.custom_output.as_ref().map(absolutize);
+        let output = hybrid::repair_sync(&input, offset, custom_output.as_deref(), &rt, &logger)?;
+        if rt.dry_run {
+            logger.completed(&output);
+        } else {
+            checker::check_file_with_phase_offset(&output, &rt, &logger, 15)?;
+        }
+        return Ok(());
+    }
+
+    if cli.checker_mode {
+        let input = cli
+            .input_path
+            .as_ref()
+            .map(absolutize)
+            .ok_or_else(|| "No checker input provided".to_string())?;
+        checker::check_file(&input, &rt, &logger)?;
+        return Ok(());
+    }
 
     if cli.hybrid_mode {
         let dv_source = cli
@@ -95,6 +126,7 @@ fn run(cli: CliArgs) -> AppResult<()> {
 }
 
 fn main() {
+    cancellation::install();
     let cli = match parse_args() {
         Ok(v) => v,
         Err(e) => {
@@ -104,8 +136,58 @@ fn main() {
         }
     };
 
-    if let Err(e) = run(cli) {
+    let json_progress = cli.progress == cli::ProgressMode::JsonLines;
+    let result = execute(&cli);
+    if let Err(e) = result {
+        if json_progress {
+            let event = if cancellation::requested() {
+                "cancelled"
+            } else {
+                "failed"
+            };
+            println!(
+                "{}",
+                serde_json::json!({"version":1,"event":event,"error":e})
+            );
+        }
         eprintln!("{RED}{e}{NC}");
         std::process::exit(1);
     }
+}
+
+fn execute(cli: &CliArgs) -> AppResult<()> {
+    let mut report = report::JobReport::begin(cli)?;
+    let mut result = match build_runtime(cli) {
+        Ok((rt, mut logger)) => {
+            if let Some(report) = report.as_mut() {
+                report.tools(&rt);
+                logger.attach_report(report.recorder.clone());
+            }
+            run(cli, rt, logger)
+        }
+        Err(e) => Err(e),
+    };
+    if let Some(report) = report.as_mut() {
+        if let Some(error) = report.input_change_error() {
+            result = Err(error);
+        }
+        let final_event = report.finish(&result, cancellation::requested())?;
+        if cli.progress == cli::ProgressMode::JsonLines {
+            if result.is_ok() && !cancellation::requested() {
+                for event in report
+                    .recorder
+                    .events()
+                    .iter()
+                    .filter(|e| e["event"] == "completed")
+                {
+                    println!("{event}");
+                }
+            }
+            println!("{final_event}");
+        }
+    }
+    if cancellation::requested() {
+        return Err("Operation cancelled".into());
+    }
+    result
 }

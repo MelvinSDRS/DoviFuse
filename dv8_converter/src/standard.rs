@@ -2,10 +2,13 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::exec::{run_capture, run_status, AppResult, CleanupGuard};
-use crate::fsutil::{check_disk_space, collect_mkv_files, move_to_dir};
+use crate::exec::{run_status, AppResult, CleanupGuard};
+use crate::fsutil::{check_disk_space_hybrid, collect_mkv_files, create_job_dir, move_to_dir};
+use crate::hybrid::validate::hybrid_get_rpu_frame_count;
 use crate::logger::Logger;
-use crate::mediainfo::get_hevc_track_id;
+use crate::mediainfo::{
+    get_hevc_track_id, has_hdr10_base, hybrid_detect_dv_profile, hybrid_get_media_info,
+};
 use crate::runtime::Runtime;
 
 pub(crate) fn is_dv7_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppResult<bool> {
@@ -19,16 +22,10 @@ pub(crate) fn is_dv7_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppResu
         return Ok(false);
     }
 
-    let args = vec![file.as_os_str().to_os_string()];
-    let info = run_capture(logger, &rt.mediainfo, &args)?;
-    let lower = info.to_lowercase();
-
-    let has_profile7 = (lower.contains("dolby")
-        && lower.contains("vision")
-        && (lower.contains("profile 7") || lower.contains("profile: 7")))
-        || lower.contains("dvhe.07");
+    let has_profile7 = hybrid_detect_dv_profile(file, rt, logger)? == Some(7);
 
     if has_profile7 {
+        get_hevc_track_id(file, rt, logger)?;
         logger.log(&format!("{} DV7 detected", file.display()));
         Ok(true)
     } else {
@@ -94,6 +91,7 @@ pub(crate) fn make_dv8_name(name: &str) -> String {
 }
 
 pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppResult<()> {
+    let source_identity = crate::report::identity(file);
     let input_dir = file
         .parent()
         .ok_or_else(|| format!("Invalid path: {}", file.display()))?;
@@ -103,37 +101,37 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
         .to_string_lossy()
         .to_string();
 
-    let bl_el_rpu_hevc = input_dir.join(format!("{mkv_base}.BL_EL_RPU.hevc"));
-    let dv7_el_rpu_hevc = input_dir.join(format!("{mkv_base}.DV7.EL_RPU.hevc"));
-    let dv8_bl_rpu_hevc = input_dir.join(format!("{mkv_base}.DV8.BL_RPU.hevc"));
-    let dv8_rpu_bin = input_dir.join(format!("{mkv_base}.DV8.RPU.bin"));
+    let scratch_root = rt.tmp_dir.as_deref().unwrap_or(input_dir);
+    let scratch_owned = if !rt.dry_run {
+        create_job_dir(scratch_root, "dv8-standard")?
+    } else {
+        scratch_root.to_path_buf()
+    };
+    let scratch = scratch_owned.as_path();
+    let bl_el_rpu_hevc = scratch.join(format!("{mkv_base}.BL_EL_RPU.hevc"));
+    let dv7_el_rpu_hevc = scratch.join(format!("{mkv_base}.DV7.EL_RPU.hevc"));
+    let dv8_bl_rpu_hevc = scratch.join(format!("{mkv_base}.DV8.BL_RPU.hevc"));
+    let dv8_rpu_bin = scratch.join(format!("{mkv_base}.DV8.RPU.bin"));
 
     let mut cleanup = CleanupGuard::new(logger.clone());
-    cleanup.add(&bl_el_rpu_hevc);
-    cleanup.add(&dv7_el_rpu_hevc);
-    cleanup.add(&dv8_bl_rpu_hevc);
-    cleanup.add(&dv8_rpu_bin);
+    if !rt.dry_run {
+        cleanup.add_dir(scratch);
+    }
 
     // let out_base = make_dv8_name(&mkv_base);
     let out_base = mkv_base.clone();
-    let final_file = input_dir.join(format!("{out_base}.mkv"));
+    // Preserve the exact source name, including an uppercase .MKV extension.
+    let final_file = file.to_path_buf();
     let out_file = input_dir.join(format!("{out_base}.DV8_TMP.mkv"));
 
     if out_file.exists() {
-        logger.warn(&format!(
-            "Output file already exists, skipping: {}",
+        return Err(format!(
+            "Temporary output already exists: {}",
             out_file.display()
         ));
-        logger.log(&format!(
-            "{} skipped: output already exists: {}",
-            file.display(),
-            out_file.display()
-        ));
-        cleanup.clear();
-        return Ok(());
     }
 
-    check_disk_space(file, logger)?;
+    check_disk_space_hybrid(file, scratch_root, input_dir, logger)?;
 
     if rt.dry_run {
         logger.ok(&format!("[DRY RUN] Would convert: {}", file.display()));
@@ -144,11 +142,34 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
                 rt.output_dir.display()
             ));
         }
+        logger.completed(&final_file);
         cleanup.clear();
         return Ok(());
     }
 
+    rt.require_ffmpeg()?;
+    crate::fsutil::reserve_output(&out_file)?;
+    cleanup.add(&out_file);
     let track_id = get_hevc_track_id(file, rt, logger)?;
+    let remux_source = crate::remux::RemuxSource::read(file, rt, logger)?;
+    let source_info = hybrid_get_media_info(file, rt, logger)?;
+    if source_info.frame_count == 0 || !has_hdr10_base(&source_info) {
+        return Err(
+            "Source must have a known frame count and a 10-bit BT.2020 PQ base layer".to_string(),
+        );
+    }
+    let timestamps = scratch.join("video.timestamps.txt");
+    run_status(
+        logger,
+        false,
+        true,
+        &rt.mkvextract,
+        &[
+            file.as_os_str().to_os_string(),
+            "timestamps_v2".into(),
+            format!("{track_id}:{}", timestamps.display()).into(),
+        ],
+    )?;
     logger.dbg(&format!("Using video track ID: {track_id}"));
 
     logger.step("1 | Extract BL+EL+RPU");
@@ -162,6 +183,14 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
             file.as_os_str().to_os_string(),
             OsString::from(format!("{}:{}", track_id, bl_el_rpu_hevc.display())),
         ],
+    )?;
+
+    crate::enhancement::inspect(
+        &bl_el_rpu_hevc,
+        &scratch.join("source-rpu.bin"),
+        source_info.frame_count,
+        rt,
+        logger,
     )?;
 
     logger.step("2 | Demux EL+RPU");
@@ -202,8 +231,8 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
         ],
     )?;
 
-    logger.step("4 | Extract RPU (optional)");
-    let _ = run_status(
+    logger.step("4 | Validate converted RPU");
+    run_status(
         logger,
         rt.dry_run,
         true,
@@ -214,7 +243,13 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
             OsString::from("-o"),
             dv8_rpu_bin.as_os_str().to_os_string(),
         ],
-    );
+    )?;
+    let rpu_frames = hybrid_get_rpu_frame_count(&dv8_rpu_bin, rt, logger)?;
+    if rpu_frames != source_info.frame_count {
+        return Err(
+            "Converted RPU count differs from original video; keeping original".to_string(),
+        );
+    }
 
     logger.step("5 | Prepare output name");
     logger.dbg(&format!("Output temp name: {}", out_file.display()));
@@ -226,18 +261,9 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
         rt.dry_run,
         true,
         &rt.mkvmerge,
-        &[
-            OsString::from("-o"),
-            out_file.as_os_str().to_os_string(),
-            OsString::from("-D"),
-            file.as_os_str().to_os_string(),
-            dv8_bl_rpu_hevc.as_os_str().to_os_string(),
-            OsString::from("--track-order"),
-            OsString::from("1:0"),
-        ],
+        &remux_source.arguments(file, &dv8_bl_rpu_hevc, &timestamps, &out_file)?,
     )?;
 
-    let orig_size = fs::metadata(file).map(|m| m.len()).unwrap_or(0);
     let out_size = fs::metadata(&out_file).map(|m| m.len()).unwrap_or(0);
 
     if out_size == 0 {
@@ -248,21 +274,41 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
         ));
     }
 
-    if orig_size > 0 && (out_size * 100 / orig_size) < 50 {
-        return Err(format!(
-            "Output is much smaller than original ({} MB vs {} MB) - keeping original",
-            out_size / 1_048_576,
-            orig_size / 1_048_576
-        ));
+    remux_source.verify(&out_file, rt, logger)?;
+
+    let output_info = hybrid_get_media_info(&out_file, rt, logger)?;
+    if hybrid_detect_dv_profile(&out_file, rt, logger)? != Some(8)
+        || !has_hdr10_base(&output_info)
+        || output_info.frame_count != source_info.frame_count
+    {
+        return Err(
+            "Output profile, HDR10 base or frame count validation failed; keeping original"
+                .to_string(),
+        );
     }
+    let decoded = crate::ffmpeg::scan_video(rt, logger, &out_file, 8.0)?;
+    if decoded.frames != source_info.frame_count {
+        return Err(
+            "Decoded output frame count differs from original; keeping original".to_string(),
+        );
+    }
+
+    logger.check_result("standard_output", "Converted output", "pass",
+        "Profile 8, HDR10 base, RPU/video frame counts, full video decode and supported container headers verified before replacing the source.");
 
     let _ = fs::remove_file(&bl_el_rpu_hevc);
     let _ = fs::remove_file(&dv8_bl_rpu_hevc);
     let _ = fs::remove_file(&dv8_rpu_bin);
-    cleanup.clear();
 
-    fs::remove_file(file)
-        .map_err(|e| format!("Failed to delete original {}: {e}", file.display()))?;
+    // Both paths are in the input directory. On Unix, rename atomically
+    // replaces the original; if it fails, CleanupGuard removes only the
+    // temporary output and the original remains untouched.
+    if crate::report::identity(file) != source_identity {
+        return Err("Source filesystem identity changed during conversion; refusing to replace the changed source".into());
+    }
+    if crate::cancellation::requested() {
+        return Err("Conversion cancelled before source replacement".into());
+    }
     fs::rename(&out_file, &final_file).map_err(|e| {
         format!(
             "Failed to rename output {} to {}: {e}",
@@ -270,6 +316,10 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
             final_file.display()
         )
     })?;
+    if !rt.dry_run {
+        let _ = fs::remove_dir_all(scratch);
+    }
+    cleanup.clear();
 
     logger.log(&format!(
         "{} processed successfully -> {}",
@@ -277,6 +327,7 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
         final_file.display()
     ));
     logger.ok(&format!("Done: {}", final_file.display()));
+    logger.completed(&final_file);
 
     Ok(())
 }
@@ -305,7 +356,7 @@ pub(crate) fn process_directory(dir: &Path, rt: &Runtime, logger: &Logger) -> Ap
 
     logger.ok(&format!("{count} file(s) converted."));
     if failures > 0 {
-        logger.warn(&format!("{failures} file(s) failed."));
+        return Err(format!("{failures} file(s) failed; {count} converted"));
     }
 
     Ok(())

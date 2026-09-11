@@ -1,6 +1,8 @@
+pub(crate) mod active_area;
 pub(crate) mod align;
 pub(crate) mod editor;
 pub(crate) mod grade;
+pub(crate) mod l5;
 pub(crate) mod letterbox;
 pub(crate) mod preflight;
 pub(crate) mod scenes;
@@ -8,12 +10,12 @@ pub(crate) mod validate;
 
 use std::ffi::OsString;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cli::{GradeCheckMode, HybridOptions, LetterboxMode, SyncMode};
 use crate::exec::{run_status, AppResult, CleanupGuard};
 use crate::ffmpeg::detect_scene_cuts;
-use crate::fsutil::check_disk_space_hybrid;
+use crate::fsutil::{check_disk_space_hybrid, create_job_dir};
 use crate::logger::Logger;
 use crate::mediainfo::{
     fps_from_info, get_hevc_track_id, hybrid_detect_dv_profile, hybrid_get_media_info,
@@ -83,6 +85,26 @@ fn compute_alignment(
     let max_offset = correlation_max_offset(opts, fps);
     let report = correlate_scene_cuts(&dv_cuts, &hdr_cuts, max_offset, 1);
 
+    if let Some(expected_offset) = opts.known_offset {
+        match report.accepted {
+            Some(sync) if sync.offset == expected_offset => logger.ok(&format!(
+                "Checker offset reconfirmed at {expected_offset:+} frames before repair"
+            )),
+            Some(sync) => {
+                return Err(format!(
+                    "Repair stopped: checker reported offset {expected_offset:+}, but the fresh scan found {:+}",
+                    sync.offset
+                ))
+            }
+            None => {
+                return Err(format!(
+                    "Repair stopped: the checker offset {expected_offset:+} could not be reconfirmed ({})",
+                    report.rejection.as_deref().unwrap_or("unknown reason")
+                ))
+            }
+        }
+    }
+
     match report.accepted {
         Some(sync) => {
             logger.ok(&format!(
@@ -127,6 +149,82 @@ pub(crate) fn process_hybrid(
     rt: &Runtime,
     logger: &Logger,
 ) -> AppResult<()> {
+    process_hybrid_impl(
+        dv_source,
+        hdr_target,
+        custom_output,
+        opts,
+        rt,
+        logger,
+        false,
+        true,
+    )
+}
+
+pub(crate) fn repair_sync(
+    file: &Path,
+    offset: i64,
+    custom_output: Option<&Path>,
+    rt: &Runtime,
+    logger: &Logger,
+) -> AppResult<PathBuf> {
+    let output = match custom_output {
+        Some(path) => path.to_path_buf(),
+        None => repair_output_path(file)?,
+    };
+    if output.exists() {
+        return Err(format!(
+            "Repair output already exists: {}",
+            output.display()
+        ));
+    }
+
+    let opts = HybridOptions {
+        skip_grade_check: true,
+        letterbox: LetterboxMode::Off,
+        known_offset: Some(offset),
+        ..HybridOptions::default()
+    };
+    process_hybrid_impl(file, file, Some(&output), &opts, rt, logger, true, false)?;
+    Ok(output)
+}
+
+fn repair_output_path(file: &Path) -> AppResult<PathBuf> {
+    let dir = file
+        .parent()
+        .ok_or_else(|| format!("Invalid repair input path: {}", file.display()))?;
+    let stem = file
+        .file_stem()
+        .ok_or_else(|| format!("Invalid repair input filename: {}", file.display()))?
+        .to_string_lossy();
+
+    let first = dir.join(format!("{stem}.DV8.Fixed.mkv"));
+    if !first.exists() {
+        return Ok(first);
+    }
+    for index in 2..=9999 {
+        let candidate = dir.join(format!("{stem}.DV8.Fixed.{index}.mkv"));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!(
+        "Could not choose an unused repair output beside {}",
+        file.display()
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn process_hybrid_impl(
+    dv_source: &Path,
+    hdr_target: &Path,
+    custom_output: Option<&Path>,
+    opts: &HybridOptions,
+    rt: &Runtime,
+    logger: &Logger,
+    allow_same_input: bool,
+    emit_completed: bool,
+) -> AppResult<()> {
     logger.step("Hybrid mode");
 
     if !dv_source.exists() {
@@ -139,7 +237,7 @@ pub(crate) fn process_hybrid(
         ));
     }
 
-    if fs::canonicalize(dv_source).ok() == fs::canonicalize(hdr_target).ok() {
+    if !allow_same_input && fs::canonicalize(dv_source).ok() == fs::canonicalize(hdr_target).ok() {
         return Err("DV source and HDR target must be different files".to_string());
     }
 
@@ -158,16 +256,22 @@ pub(crate) fn process_hybrid(
     };
 
     if output_path.exists() {
-        logger.warn(&format!(
-            "Output file already exists, skipping: {}",
+        return Err(format!(
+            "Output file already exists: {}",
             output_path.display()
         ));
-        return Ok(());
     }
 
-    let tmp_dir = hdr_target
+    let target_dir = hdr_target
         .parent()
         .ok_or_else(|| format!("Invalid HDR target path: {}", hdr_target.display()))?;
+    let scratch_root = rt.tmp_dir.as_deref().unwrap_or(target_dir);
+    let tmp_dir_owned = if !rt.dry_run {
+        create_job_dir(scratch_root, "dv8-hybrid")?
+    } else {
+        scratch_root.to_path_buf()
+    };
+    let tmp_dir = tmp_dir_owned.as_path();
     let base = hdr_target
         .file_stem()
         .ok_or_else(|| format!("Invalid HDR target filename: {}", hdr_target.display()))?
@@ -176,6 +280,7 @@ pub(crate) fn process_hybrid(
 
     let hybrid_rpu = tmp_dir.join(format!("{base}.hybrid.rpu.bin"));
     let hybrid_aligned_rpu = tmp_dir.join(format!("{base}.hybrid.aligned.rpu.bin"));
+    let hybrid_l5_rpu = tmp_dir.join(format!("{base}.hybrid.target-l5.rpu.bin"));
     let hybrid_hevc = tmp_dir.join(format!("{base}.hybrid.hevc"));
     let hybrid_injected_hevc = tmp_dir.join(format!("{base}.hybrid.injected.hevc"));
     let hybrid_editor_json = tmp_dir.join(format!("{base}.hybrid.editor.json"));
@@ -195,6 +300,7 @@ pub(crate) fn process_hybrid(
     let intermediates = [
         &hybrid_rpu,
         &hybrid_aligned_rpu,
+        &hybrid_l5_rpu,
         &hybrid_hevc,
         &hybrid_injected_hevc,
         &hybrid_editor_json,
@@ -209,16 +315,33 @@ pub(crate) fn process_hybrid(
     }
 
     let mut cleanup = CleanupGuard::new(logger.clone());
-    for path in intermediates {
-        cleanup.add(path);
+    if !rt.dry_run {
+        cleanup.add_dir(tmp_dir);
+    }
+    if !rt.dry_run {
+        for path in intermediates {
+            cleanup.add(path);
+        }
+        crate::fsutil::reserve_output(&output_path)?;
+        cleanup.add(&output_path);
     }
 
     logger.step("0 | Determine output path");
     logger.ok(&format!("Hybrid output: {}", output_path.display()));
 
     logger.step("1 | Gather media info");
+    get_hevc_track_id(dv_source, rt, logger)?;
+    get_hevc_track_id(hdr_target, rt, logger)?;
     let dv_info = hybrid_get_media_info(dv_source, rt, logger)?;
     let hdr_info = hybrid_get_media_info(hdr_target, rt, logger)?;
+    let target_profile = hybrid_detect_dv_profile(hdr_target, rt, logger)?;
+    if (!allow_same_input && target_profile.is_some())
+        || (allow_same_input && target_profile != Some(8))
+    {
+        return Err(
+            "Hybrid requires an HDR10-only target; sync repair requires Profile 8".to_string(),
+        );
+    }
 
     logger.step("2 | Detect DV profile");
     let dv_profile = hybrid_detect_dv_profile(dv_source, rt, logger)?;
@@ -239,12 +362,9 @@ pub(crate) fn process_hybrid(
     let out_dir = output_path
         .parent()
         .ok_or_else(|| format!("Invalid output path: {}", output_path.display()))?;
-    check_disk_space_hybrid(hdr_target, out_dir, logger)?;
+    check_disk_space_hybrid(hdr_target, scratch_root, out_dir, logger)?;
 
-    let grade_measures = !opts.skip_grade_check && opts.grade_check != GradeCheckMode::Metadata;
-    if opts.sync == SyncMode::Scenes || grade_measures {
-        rt.require_ffmpeg()?;
-    }
+    rt.require_ffmpeg()?;
 
     if rt.dry_run {
         logger.ok("[DRY RUN] Preflight completed. Mutating steps were skipped.");
@@ -262,6 +382,9 @@ pub(crate) fn process_hybrid(
             logger.ok("[DRY RUN] Would validate output and delete both originals on success (--delete-sources)");
         } else {
             logger.ok("[DRY RUN] Would validate output and keep both originals");
+        }
+        if emit_completed {
+            logger.completed(&output_path);
         }
         cleanup.clear();
         return Ok(());
@@ -304,8 +427,10 @@ pub(crate) fn process_hybrid(
         rt,
         logger,
     )?;
-    let exact_alignment = strategy.action == "scene_sync";
 
+    logger.measurement("alignment", serde_json::json!({"offset_frames":strategy.start_offset,"method":format!("{:?}",opts.sync),"description":strategy.description,"high_risk":strategy.high_risk,"picture_alignment_verified":false}));
+    logger.check_result("picture_alignment", "Picture alignment", "inconclusive",
+        "The offset is based on metadata scene flags or frame counts. Full-film decoded-picture alignment has not been validated.");
     logger.ok(&format!("Alignment strategy: {}", strategy.description));
     if strategy.high_risk {
         logger.warn("Alignment marked HIGH RISK due to large frame difference");
@@ -329,6 +454,7 @@ pub(crate) fn process_hybrid(
             opts.grade_check,
             opts.grade_windows,
         )?;
+        logger.measurement("grade", serde_json::json!({"mode":format!("{:?}",opts.grade_check),"windows_measured":outcome.windows_measured,"windows_bad":outcome.windows_bad,"worst_delta_pq":outcome.worst_delta_pq,"peak_ratio":outcome.peak_ratio,"pass":outcome.pass,"method":"legacy PQ brightness windows; not calibrated RGB creative-grade equivalence"}));
         logger.log(&format!(
             "Grade summary: {} windows measured, {} mismatched, worst mean |dPQ| {:.4}, p99 peak {:.0} nits (DV) vs {:.0} nits (HDR), ratio {:.2}",
             outcome.windows_measured,
@@ -340,12 +466,14 @@ pub(crate) fn process_hybrid(
         ));
         if !outcome.pass {
             return Err(format!(
-                "Grade check FAILED: the two sources appear to use different HDR grades ({} of {} windows mismatched, peak ratio {:.2}). A hybrid from these would tone-map incorrectly. Use --skip-grade-check only if you are certain the grades match.",
+                "Brightness comparison failed: {} of {} windows mismatched, peak ratio {:.2}. Grade compatibility has not been established; hybrid creation stopped.",
                 outcome.windows_bad, outcome.windows_measured, outcome.peak_ratio
             ));
         }
-        logger.ok("Grade check passed: brightness profiles match");
+        logger.ok("No brightness mismatch detected within the measured coverage");
     }
+    logger.check_result("picture_grade", "Picture grade compatibility", "inconclusive",
+        "Calibrated RGB/chroma grade compatibility has not been established. Brightness or static-metadata checks alone do not verify the creative grade.");
 
     logger.step("8 | Letterbox L5 (active area)");
     let active_area = match opts.letterbox {
@@ -377,7 +505,7 @@ pub(crate) fn process_hybrid(
             let canvas_match = dv_info.width == hdr_info.width
                 && dv_info.height == hdr_info.height
                 && dv_info.width.is_some();
-            let (choice, logs) = decide_active_area(measured, &dv_presets, canvas_match);
+            let (choice, logs) = decide_active_area(measured, &dv_presets, canvas_match)?;
             for (warn, msg) in &logs {
                 if *warn {
                     logger.warn(msg);
@@ -388,6 +516,10 @@ pub(crate) fn process_hybrid(
             choice
         }
     };
+    logger.check_result(
+        "active_area_picture", "Active-picture coverage", "inconclusive",
+        "Full-timeline target-picture/L5 correspondence has not been validated. Sources will be retained; no automatic active-area repair is available.",
+    );
 
     logger.step("9 | Apply editor (mode conversion + alignment)");
     hybrid_build_editor_json(
@@ -395,9 +527,32 @@ pub(crate) fn process_hybrid(
         dv_profile,
         &dv_info,
         &hdr_info,
-        &active_area,
+        if matches!(active_area, ActiveAreaChoice::Measured(_)) {
+            &ActiveAreaChoice::Keep
+        } else {
+            &active_area
+        },
         &hybrid_editor_json,
     )?;
+
+    if allow_same_input {
+        // A sync repair must move the original metadata, preserving mapping and trims.
+        let mut config = editor::build_editor_config(
+            &strategy,
+            dv_profile,
+            &dv_info,
+            &hdr_info,
+            &ActiveAreaChoice::Keep,
+        );
+        config.mode = 0;
+        config.remove_mapping = false;
+        config.level6 = None;
+        fs::write(
+            &hybrid_editor_json,
+            serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+    }
 
     run_status(
         logger,
@@ -417,20 +572,39 @@ pub(crate) fn process_hybrid(
 
     let aligned_frames = hybrid_get_rpu_frame_count(&hybrid_aligned_rpu, rt, logger)?;
     if aligned_frames != hdr_info.frame_count {
-        if exact_alignment {
-            return Err(format!(
-                "Aligned RPU frames ({aligned_frames}) do not match HDR target frames ({}) despite scene-sync alignment",
-                hdr_info.frame_count
-            ));
-        }
-        logger.warn(&format!(
-            "Aligned RPU frames ({aligned_frames}) do not match HDR target frames ({}) - inject-rpu will auto-handle residual mismatch",
-            hdr_info.frame_count
-        ));
+        return Err(format!("Aligned RPU has {aligned_frames} frames; expected {}. Refusing implicit truncation or padding.", hdr_info.frame_count));
     }
+
+    let canvas = (
+        hdr_info.width.ok_or("Missing target width")?,
+        hdr_info.height.ok_or("Missing target height")?,
+    );
+    if let ActiveAreaChoice::Measured(bars) = active_area {
+        let timeline =
+            active_area::Timeline::constant(hdr_info.frame_count, bars, canvas.0, canvas.1)?;
+        l5::apply_after_alignment(
+            &timeline,
+            &hybrid_aligned_rpu,
+            &hybrid_l5_rpu,
+            &hybrid_editor_json,
+            &hybrid_l5_json,
+            canvas,
+            rt,
+            logger,
+        )?;
+    }
+    let expected_l5 = l5::export_timeline(
+        &hybrid_aligned_rpu,
+        &hybrid_l5_json,
+        hdr_info.frame_count,
+        canvas,
+        rt,
+        logger,
+    )?;
 
     logger.step("10 | Extract HEVC from HDR target");
     let track_id = get_hevc_track_id(hdr_target, rt, logger)?;
+    let remux_source = crate::remux::RemuxSource::read(hdr_target, rt, logger)?;
     run_status(
         logger,
         rt.dry_run,
@@ -460,21 +634,25 @@ pub(crate) fn process_hybrid(
         ],
     )?;
 
+    let timestamps = tmp_dir.join("video.timestamps.txt");
+    run_status(
+        logger,
+        false,
+        true,
+        &rt.mkvextract,
+        &[
+            hdr_target.as_os_str().to_os_string(),
+            "timestamps_v2".into(),
+            format!("{track_id}:{}", timestamps.display()).into(),
+        ],
+    )?;
     logger.step("12 | Remux final MKV");
     let remux_result = run_status(
         logger,
         rt.dry_run,
         true,
         &rt.mkvmerge,
-        &[
-            OsString::from("-o"),
-            output_path.as_os_str().to_os_string(),
-            OsString::from("-D"),
-            hdr_target.as_os_str().to_os_string(),
-            hybrid_injected_hevc.as_os_str().to_os_string(),
-            OsString::from("--track-order"),
-            OsString::from("1:0"),
-        ],
+        &remux_source.arguments(hdr_target, &hybrid_injected_hevc, &timestamps, &output_path)?,
     );
     if let Err(e) = remux_result {
         // A failed mkvmerge (disk full, ...) can leave a partial file at the
@@ -504,6 +682,16 @@ pub(crate) fn process_hybrid(
                 output_path.clone()
             }
         };
+        for (source, suffix) in [
+            (&dv_scenes_txt, "dv_scenes.txt"),
+            (&hdr_scenes_txt, "hdr_scenes.txt"),
+            (&verify_scenes_txt, "verify_scenes.txt"),
+        ] {
+            if source.exists() {
+                let diagnostic = kept_path.with_extension(suffix);
+                let _ = fs::copy(source, diagnostic);
+            }
+        }
         logger.log(&format!(
             "Hybrid validation failed: {} + {} -> kept at {}",
             dv_source.display(),
@@ -514,10 +702,20 @@ pub(crate) fn process_hybrid(
     };
 
     logger.step("13 | Validate output");
+    remux_source
+        .verify(&output_path, rt, logger)
+        .map_err(fail_output)?;
     if let Err(e) = hybrid_validate_output(&output_path, hdr_target, rt, logger) {
         return Err(fail_output(e));
     }
 
+    let scan = crate::ffmpeg::scan_video(rt, logger, &output_path, opts.scene_threshold)
+        .map_err(fail_output)?;
+    if scan.frames != hdr_info.frame_count {
+        return Err(fail_output(
+            "Decoded output count differs from HDR target".to_string(),
+        ));
+    }
     logger.step("14 | Post-inject sync verification");
     if let Err(e) = hybrid_verify_output_sync(
         &output_path,
@@ -532,6 +730,22 @@ pub(crate) fn process_hybrid(
         return Err(fail_output(e));
     }
 
+    let actual_l5 = l5::export_timeline(
+        &verify_rpu,
+        &hybrid_l5_json,
+        hdr_info.frame_count,
+        canvas,
+        rt,
+        logger,
+    )
+    .map_err(fail_output)?;
+    if expected_l5 != actual_l5 {
+        return Err(fail_output(
+            "Output L5 frame intervals differ from the aligned RPU".into(),
+        ));
+    }
+    logger.ok("Re-extracted output L5 matches every expected frame interval (metadata preservation, not picture-area validation)");
+
     logger.step("15 | Cleanup");
     let _ = fs::remove_file(&hybrid_rpu);
     let _ = fs::remove_file(&hybrid_aligned_rpu);
@@ -543,17 +757,15 @@ pub(crate) fn process_hybrid(
     let _ = fs::remove_file(&hybrid_l5_json);
     let _ = fs::remove_file(&verify_rpu);
     let _ = fs::remove_file(&verify_scenes_txt);
+    if !rt.dry_run {
+        let _ = fs::remove_dir_all(tmp_dir);
+    }
     cleanup.clear();
 
     if opts.delete_sources {
-        fs::remove_file(dv_source)
-            .map_err(|e| format!("Failed to delete DV source {}: {e}", dv_source.display()))?;
-        fs::remove_file(hdr_target)
-            .map_err(|e| format!("Failed to delete HDR target {}: {e}", hdr_target.display()))?;
-        logger.ok("Deleted both source files (--delete-sources)");
-    } else {
-        logger.ok("Keeping both source files (use --delete-sources to remove them)");
+        logger.warn("Keeping both source files: active-area picture validation does not yet cover the full timeline; --delete-sources withheld");
     }
+    logger.ok("Keeping both source files");
 
     logger.log(&format!(
         "Hybrid processed successfully: {} + {} -> {}",
@@ -562,6 +774,34 @@ pub(crate) fn process_hybrid(
         output_path.display()
     ));
     logger.ok(&format!("Hybrid done: {}", output_path.display()));
+    if emit_completed {
+        logger.completed(&output_path);
+    }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod repair_tests {
+    use super::*;
+
+    #[test]
+    fn repair_output_is_non_destructive_and_numbered() {
+        let root =
+            std::env::temp_dir().join(format!("dv8-repair-name-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let input = root.join("Movie.mkv");
+        fs::write(&input, b"input").unwrap();
+
+        let first = repair_output_path(&input).unwrap();
+        assert_eq!(first, root.join("Movie.DV8.Fixed.mkv"));
+        fs::write(&first, b"existing").unwrap();
+        assert_eq!(
+            repair_output_path(&input).unwrap(),
+            root.join("Movie.DV8.Fixed.2.mkv")
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }

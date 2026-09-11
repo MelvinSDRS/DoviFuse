@@ -1,11 +1,85 @@
 //! ffmpeg invocation wrappers and pure parsers for their outputs.
 
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
+use crate::cli::HwAccelMode;
 use crate::exec::{run_capture_all, AppResult};
 use crate::logger::Logger;
 use crate::runtime::Runtime;
+
+static VIDEOTOOLBOX_PROBES: OnceLock<Mutex<HashMap<std::path::PathBuf, bool>>> = OnceLock::new();
+
+fn wants_videotoolbox(rt: &Runtime) -> bool {
+    match rt.hwaccel {
+        HwAccelMode::Off => false,
+        HwAccelMode::VideoToolbox => true,
+        HwAccelMode::Auto => cfg!(target_os = "macos"),
+    }
+}
+
+fn use_videotoolbox(rt: &Runtime, logger: &Logger, file: &Path, filter: &str) -> bool {
+    if !wants_videotoolbox(rt) {
+        return false;
+    }
+    let cache = VIDEOTOOLBOX_PROBES.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(result) = cache.lock().ok().and_then(|m| m.get(file).copied()) {
+        return result;
+    }
+    let Ok(ffmpeg) = rt.require_ffmpeg() else {
+        return false;
+    };
+    let args = vec![
+        OsString::from("-nostdin"),
+        OsString::from("-hide_banner"),
+        OsString::from("-v"),
+        OsString::from("error"),
+        OsString::from("-hwaccel"),
+        OsString::from("videotoolbox"),
+        OsString::from("-ss"),
+        OsString::from("0"),
+        OsString::from("-i"),
+        file.as_os_str().to_os_string(),
+        OsString::from("-map"),
+        OsString::from("0:v:0"),
+        OsString::from("-t"),
+        OsString::from("0.25"),
+        OsString::from("-vf"),
+        OsString::from(filter),
+        OsString::from("-frames:v"),
+        OsString::from("1"),
+        OsString::from("-an"),
+        OsString::from("-sn"),
+        OsString::from("-f"),
+        OsString::from("null"),
+        OsString::from("-"),
+    ];
+    let enabled = run_capture_all(logger, ffmpeg, &args, false).is_ok();
+    if enabled {
+        logger.ok(&format!(
+            "VideoToolbox hardware decode enabled for {}",
+            file.display()
+        ));
+    } else {
+        logger.warn(&format!(
+            "VideoToolbox probe failed for {}; using software decode",
+            file.display()
+        ));
+    }
+    if let Ok(mut m) = cache.lock() {
+        m.insert(file.to_path_buf(), enabled);
+    }
+    enabled
+}
+
+fn append_hwaccel(args: &mut Vec<OsString>, enabled: bool) {
+    if enabled {
+        args.push(OsString::from("-hwaccel"));
+        args.push(OsString::from("videotoolbox"));
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct SampleWindow {
@@ -166,7 +240,7 @@ pub(crate) fn measure_luma_window(
     w: &SampleWindow,
     crop: Option<&CropRect>,
 ) -> AppResult<Vec<FrameLuma>> {
-    let (ffmpeg, _) = rt.require_ffmpeg()?;
+    let ffmpeg = rt.require_ffmpeg()?;
     let filter = match crop {
         Some(c) => format!(
             "crop={}:{}:{}:{},signalstats,metadata=mode=print:file=-",
@@ -174,11 +248,14 @@ pub(crate) fn measure_luma_window(
         ),
         None => "signalstats,metadata=mode=print:file=-".to_string(),
     };
-    let args = vec![
+    let mut args = vec![
         OsString::from("-nostdin"),
         OsString::from("-hide_banner"),
         OsString::from("-v"),
         OsString::from("error"),
+    ];
+    append_hwaccel(&mut args, use_videotoolbox(rt, logger, file, &filter));
+    args.extend([
         OsString::from("-ss"),
         OsString::from(format!("{:.3}", w.start_s)),
         OsString::from("-i"),
@@ -193,10 +270,12 @@ pub(crate) fn measure_luma_window(
         OsString::from("passthrough"),
         OsString::from("-an"),
         OsString::from("-sn"),
+        OsString::from("-progress"),
+        OsString::from("pipe:2"),
         OsString::from("-f"),
         OsString::from("null"),
         OsString::from("-"),
-    ];
+    ]);
 
     let (stdout, _) = run_capture_all(logger, ffmpeg, &args, false)?;
     Ok(parse_signalstats(&stdout))
@@ -210,15 +289,37 @@ pub(crate) fn detect_scene_cuts(
     file: &Path,
     threshold: f64,
 ) -> AppResult<Vec<u64>> {
-    let (ffmpeg, _) = rt.require_ffmpeg()?;
+    Ok(scan_video(rt, logger, file, threshold)?.cuts)
+}
+
+pub(crate) struct VideoScan {
+    pub(crate) cuts: Vec<u64>,
+    pub(crate) frames: u64,
+}
+
+pub(crate) fn scan_video(
+    rt: &Runtime,
+    logger: &Logger,
+    file: &Path,
+    threshold: f64,
+) -> AppResult<VideoScan> {
+    let ffmpeg = rt.require_ffmpeg()?;
     let filter = format!(
         "scale=480:-2:flags=fast_bilinear,scdet=threshold={threshold},metadata=mode=print:key=lavfi.scd.time:file=-"
     );
-    let args = vec![
+    let mut args = vec![
         OsString::from("-nostdin"),
+        OsString::from("-xerror"),
+        OsString::from("-max_error_rate"),
+        OsString::from("0"),
+        OsString::from("-err_detect"),
+        OsString::from("explode"),
         OsString::from("-hide_banner"),
         OsString::from("-v"),
         OsString::from("error"),
+    ];
+    append_hwaccel(&mut args, use_videotoolbox(rt, logger, file, &filter));
+    args.extend([
         OsString::from("-i"),
         file.as_os_str().to_os_string(),
         OsString::from("-map"),
@@ -229,13 +330,28 @@ pub(crate) fn detect_scene_cuts(
         OsString::from("passthrough"),
         OsString::from("-an"),
         OsString::from("-sn"),
+        OsString::from("-progress"),
+        OsString::from("pipe:2"),
         OsString::from("-f"),
         OsString::from("null"),
         OsString::from("-"),
-    ];
+    ]);
 
-    let (stdout, _) = run_capture_all(logger, ffmpeg, &args, false)?;
-    Ok(parse_scdet_frames(&stdout))
+    let (stdout, stderr) = run_capture_all(logger, ffmpeg, &args, false)?;
+    let frames = stderr
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("frame=")
+                .and_then(|v| v.trim().parse::<u64>().ok())
+        })
+        .next_back()
+        .filter(|n| *n > 0)
+        .ok_or_else(|| "Full decode did not report any video frames".to_string())?;
+    Ok(VideoScan {
+        cuts: parse_scdet_frames(&stdout),
+        frames,
+    })
 }
 
 /// Run cropdetect over one window; returns the accumulated crop rectangle.
@@ -246,13 +362,17 @@ pub(crate) fn cropdetect_window(
     w: &SampleWindow,
     limit: f64,
 ) -> AppResult<Option<CropRect>> {
-    let (ffmpeg, _) = rt.require_ffmpeg()?;
-    let args = vec![
+    let ffmpeg = rt.require_ffmpeg()?;
+    let filter = format!("cropdetect=limit={limit}:round=2:reset=0");
+    let mut args = vec![
         OsString::from("-nostdin"),
         OsString::from("-hide_banner"),
         // cropdetect logs its verdicts at info level on stderr
         OsString::from("-v"),
         OsString::from("info"),
+    ];
+    append_hwaccel(&mut args, use_videotoolbox(rt, logger, file, &filter));
+    args.extend([
         OsString::from("-ss"),
         OsString::from(format!("{:.3}", w.start_s)),
         OsString::from("-i"),
@@ -262,13 +382,13 @@ pub(crate) fn cropdetect_window(
         OsString::from("-t"),
         OsString::from(format!("{:.3}", w.dur_s)),
         OsString::from("-vf"),
-        OsString::from(format!("cropdetect=limit={limit}:round=2:reset=0")),
+        OsString::from(filter),
         OsString::from("-an"),
         OsString::from("-sn"),
         OsString::from("-f"),
         OsString::from("null"),
         OsString::from("-"),
-    ];
+    ]);
 
     let (_, stderr) = run_capture_all(logger, ffmpeg, &args, false)?;
     Ok(parse_cropdetect(&stderr))

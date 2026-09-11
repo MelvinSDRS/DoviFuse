@@ -22,31 +22,7 @@ const VARIABLE_AR_PX: u32 = 8;
 /// Per-edge tolerance when comparing measured bars to the RPU's own L5.
 const L5_MATCH_PX: u32 = 4;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Bars {
-    pub(crate) left: u32,
-    pub(crate) right: u32,
-    pub(crate) top: u32,
-    pub(crate) bottom: u32,
-}
-
-impl Bars {
-    #[cfg(test)]
-    pub(crate) const ZERO: Bars = Bars {
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-    };
-
-    fn max_edge_diff(&self, other: &Bars) -> u32 {
-        self.left
-            .abs_diff(other.left)
-            .max(self.right.abs_diff(other.right))
-            .max(self.top.abs_diff(other.top))
-            .max(self.bottom.abs_diff(other.bottom))
-    }
-}
+pub(crate) use super::active_area::Bars;
 
 /// Convert a cropdetect rectangle into per-edge bar sizes on a canvas.
 pub(crate) fn bars_from_crop(
@@ -54,7 +30,11 @@ pub(crate) fn bars_from_crop(
     canvas_w: u32,
     canvas_h: u32,
 ) -> Option<Bars> {
-    if crop.w == 0 || crop.h == 0 || crop.x + crop.w > canvas_w || crop.y + crop.h > canvas_h {
+    if crop.w == 0
+        || crop.h == 0
+        || crop.x.checked_add(crop.w).is_none_or(|v| v > canvas_w)
+        || crop.y.checked_add(crop.h).is_none_or(|v| v > canvas_h)
+    {
         return None;
     }
     // Force even bars: L5 offsets apply to chroma-subsampled video.
@@ -93,7 +73,11 @@ pub(crate) fn parse_l5_presets(json: &str) -> Vec<Bars> {
     presets
         .iter()
         .filter_map(|p| {
-            let edge = |k: &str| p.get(k).and_then(|v| v.as_u64()).map(|v| v as u32);
+            let edge = |k: &str| {
+                p.get(k)
+                    .and_then(|v| v.as_u64())
+                    .and_then(|v| u32::try_from(v).ok())
+            };
             Some(Bars {
                 left: edge("left")?,
                 right: edge("right")?,
@@ -127,7 +111,17 @@ pub(crate) fn dv_rpu_l5_presets(
 
     let content = fs::read_to_string(l5_json)
         .map_err(|e| format!("Failed to read L5 export {}: {e}", l5_json.display()))?;
-    Ok(parse_l5_presets(&content))
+    let value: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid source L5 export: {e}"))?;
+    let count = value["presets"]
+        .as_array()
+        .ok_or("Missing source L5 presets")?
+        .len();
+    let presets = parse_l5_presets(&content);
+    if presets.is_empty() || presets.len() != count {
+        return Err("Invalid or incomplete source L5 presets".into());
+    }
+    Ok(presets)
 }
 
 /// cropdetect over the sample windows; None when nothing usable was measured.
@@ -173,109 +167,30 @@ pub(crate) fn decide_active_area(
     measured: Option<(Bars, u32)>,
     dv_presets: &[Bars],
     canvas_match: bool,
-) -> (ActiveAreaChoice, Vec<(bool, String)>) {
-    let mut logs: Vec<(bool, String)> = Vec::new();
-
-    let Some((bars, disagreement)) = measured else {
-        logs.push((
-            true,
-            "Letterbox measurement produced no usable windows - falling back to resolution-based L5"
-                .to_string(),
-        ));
-        return (ActiveAreaChoice::Resolution, logs);
-    };
-
+) -> Result<(ActiveAreaChoice, Vec<(bool, String)>), String> {
+    let (bars, disagreement) = measured.ok_or(
+        "Active-area measurement is inconclusive: no usable windows. No resolution fallback or source deletion is allowed.",
+    )?;
     if disagreement > VARIABLE_AR_PX {
-        logs.push((
-            true,
-            format!(
-                "Sample windows disagree on letterbox by up to {disagreement}px - variable aspect ratio (IMAX)? Applying the WIDEST active area; per-scene L5 presets are not generated (TODO)"
-            ),
-        ));
+        return Err(format!("Active-area measurement is inconclusive: sampled windows disagree by {disagreement}px. A frame-addressed timeline is required; refusing to flatten variable aspect ratios."));
     }
-
-    let distinct: Vec<Bars> = {
-        let mut d: Vec<Bars> = Vec::new();
-        for p in dv_presets {
-            if !d.contains(p) {
-                d.push(*p);
-            }
-        }
-        d
-    };
-
-    if canvas_match {
-        if !distinct.is_empty()
-            && distinct
-                .iter()
-                .all(|p| p.max_edge_diff(&bars) <= L5_MATCH_PX)
-        {
-            logs.push((
-                false,
-                format!(
-                    "RPU L5 already matches the measured letterbox (L{} R{} T{} B{}) - keeping it",
-                    bars.left, bars.right, bars.top, bars.bottom
-                ),
-            ));
-            return (ActiveAreaChoice::Keep, logs);
-        }
-
-        if distinct.len() > 1 {
-            // The RPU carries per-scene L5 (variable AR) on the same canvas;
-            // that is richer than a single measured preset.
-            let widest = distinct.iter().fold(distinct[0], |a, b| Bars {
-                left: a.left.min(b.left),
-                right: a.right.min(b.right),
-                top: a.top.min(b.top),
-                bottom: a.bottom.min(b.bottom),
-            });
-            logs.push((
-                false,
-                format!(
-                    "RPU has {} distinct L5 presets (variable AR) on a matching canvas - keeping per-scene L5",
-                    distinct.len()
-                ),
-            ));
-            if widest.max_edge_diff(&bars) > VARIABLE_AR_PX {
-                logs.push((
-                    true,
-                    format!(
-                        "Measured widest area (L{} R{} T{} B{}) differs from RPU widest preset (L{} R{} T{} B{}) - verify letterbox after conversion",
-                        bars.left, bars.right, bars.top, bars.bottom,
-                        widest.left, widest.right, widest.top, widest.bottom
-                    ),
-                ));
-            }
-            return (ActiveAreaChoice::Keep, logs);
+    let mut distinct = Vec::new();
+    for p in dv_presets {
+        if !distinct.contains(p) {
+            distinct.push(*p);
         }
     }
-
-    // The preset offsets can't be compared or kept across differing canvases,
-    // but multiple distinct presets are still proof of a variable-AR film:
-    // flattening to one measured L5 gives IMAX-style scenes the wrong active
-    // area, so don't do it silently.
-    if !canvas_match && distinct.len() > 1 {
-        logs.push((
-            true,
-            format!(
-                "RPU has {} distinct L5 presets (variable AR) but the canvases differ - applying a single measured L5; IMAX-style scenes will carry the wrong active area. Verify letterbox after conversion",
-                distinct.len()
-            ),
-        ));
+    if distinct.len() > 1 {
+        return Err("Active-area measurement is inconclusive: source RPU contains several L5 presets whose target frame intervals have not been verified. Refusing to guess or flatten them.".into());
     }
-
-    let from = distinct
-        .first()
-        .map(|p| format!("L{} R{} T{} B{}", p.left, p.right, p.top, p.bottom))
-        .unwrap_or_else(|| "none".to_string());
-    logs.push((
-        false,
-        format!(
-            "Applying measured letterbox L5: L{} R{} T{} B{} (RPU had: {from})",
-            bars.left, bars.right, bars.top, bars.bottom
-        ),
-    ));
-    (ActiveAreaChoice::Measured(bars), logs)
+    if canvas_match
+        && distinct
+            .first()
+            .is_some_and(|p| p.max_edge_diff(&bars) <= L5_MATCH_PX)
+    {
+        return Ok((ActiveAreaChoice::Keep,vec![(false,"RPU L5 agrees with sampled target bars; whole-timeline picture coverage remains unverified".into())]));
+    }
+    Ok((ActiveAreaChoice::Measured(bars),vec![(false,format!("Applying sampled L5: L{} R{} T{} B{}; whole-timeline picture coverage remains unverified",bars.left,bars.right,bars.top,bars.bottom))]))
 }
 
 #[cfg(test)]
@@ -366,7 +281,7 @@ mod tests {
             top: 280,
             bottom: 280,
         };
-        let (choice, _) = decide_active_area(Some((bars, 2)), &[bars], true);
+        let (choice, _) = decide_active_area(Some((bars, 2)), &[bars], true).unwrap();
         assert_eq!(choice, ActiveAreaChoice::Keep);
         // within tolerance
         let close = Bars {
@@ -374,24 +289,19 @@ mod tests {
             bottom: 282,
             ..bars
         };
-        let (choice, _) = decide_active_area(Some((bars, 2)), &[close], true);
+        let (choice, _) = decide_active_area(Some((bars, 2)), &[close], true).unwrap();
         assert_eq!(choice, ActiveAreaChoice::Keep);
     }
 
     #[test]
-    fn decide_keeps_variable_ar_presets_on_matching_canvas() {
+    fn decide_rejects_variable_ar_even_on_matching_canvas() {
         let scope = Bars {
-            left: 0,
-            right: 0,
             top: 280,
             bottom: 280,
+            ..Bars::ZERO
         };
-        let (choice, logs) =
-            decide_active_area(Some((Bars::ZERO, 280)), &[scope, Bars::ZERO], true);
-        assert_eq!(choice, ActiveAreaChoice::Keep);
-        assert!(logs
-            .iter()
-            .any(|(warn, m)| *warn && m.contains("variable aspect")));
+        assert!(decide_active_area(Some((Bars::ZERO, 280)), &[scope, Bars::ZERO], true).is_err());
+        assert!(decide_active_area(Some((Bars::ZERO, 0)), &[scope, Bars::ZERO], true).is_err());
     }
 
     #[test]
@@ -403,36 +313,27 @@ mod tests {
             bottom: 60,
         };
         // RPU says zero bars but target is letterboxed
-        let (choice, _) = decide_active_area(Some((measured, 0)), &[Bars::ZERO], true);
+        let (choice, _) = decide_active_area(Some((measured, 0)), &[Bars::ZERO], true).unwrap();
         assert_eq!(choice, ActiveAreaChoice::Measured(measured));
-        // different canvas: always measured, even with multiple presets -
-        // but flattening a variable-AR RPU must be warned about, even when
-        // every sampled window happened to land in same-AR scenes.
-        let (choice, logs) = decide_active_area(
+        assert!(decide_active_area(
             Some((measured, 0)),
             &[
                 Bars::ZERO,
                 Bars {
-                    left: 0,
-                    right: 0,
                     top: 280,
                     bottom: 280,
-                },
+                    ..Bars::ZERO
+                }
             ],
-            false,
-        );
-        assert_eq!(choice, ActiveAreaChoice::Measured(measured));
-        assert!(
-            logs.iter()
-                .any(|(warn, m)| *warn && m.contains("canvases differ")),
-            "{logs:?}"
-        );
+            false
+        )
+        .is_err());
     }
 
     #[test]
-    fn decide_falls_back_without_measurement() {
-        let (choice, logs) = decide_active_area(None, &[], true);
-        assert_eq!(choice, ActiveAreaChoice::Resolution);
-        assert!(logs[0].0);
+    fn decide_refuses_without_measurement() {
+        assert!(decide_active_area(None, &[], true)
+            .unwrap_err()
+            .contains("inconclusive"));
     }
 }

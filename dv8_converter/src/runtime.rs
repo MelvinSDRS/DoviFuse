@@ -1,16 +1,14 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use crate::cli::CliArgs;
+use crate::cli::{CliArgs, HwAccelMode};
 use crate::exec::AppResult;
 use crate::logger::Logger;
 
-#[derive(Clone)]
 pub(crate) struct Runtime {
     pub(crate) script_dir: PathBuf,
     pub(crate) output_dir: PathBuf,
@@ -21,6 +19,8 @@ pub(crate) struct Runtime {
     pub(crate) dovi_tool: PathBuf,
     pub(crate) ffmpeg: Option<PathBuf>,
     pub(crate) ffprobe: Option<PathBuf>,
+    pub(crate) tmp_dir: Option<PathBuf>,
+    pub(crate) hwaccel: HwAccelMode,
     pub(crate) save_el_rpu: bool,
     pub(crate) dry_run: bool,
 }
@@ -66,13 +66,8 @@ fn resolve_executable_tool_with(candidates: &[PathBuf], version_flag: &str) -> O
             continue;
         }
 
-        if let Ok(status) = Command::new(c)
-            .arg(version_flag)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-        {
-            if status.success() {
+        if let Ok(status) = crate::exec::probe(c, version_flag) {
+            if status.status.success() {
                 return Some(c.clone());
             }
         }
@@ -128,15 +123,11 @@ fn resolve_optional(script_dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 impl Runtime {
-    /// ffmpeg + ffprobe are only required in hybrid mode.
-    pub(crate) fn require_ffmpeg(&self) -> AppResult<(&Path, &Path)> {
-        match (self.ffmpeg.as_deref(), self.ffprobe.as_deref()) {
-            (Some(f), Some(p)) => Ok((f, p)),
-            _ => Err(
-                "Missing tool: ffmpeg/ffprobe (required for hybrid mode; install ffmpeg or place static builds in tools/)"
-                    .to_string(),
-            ),
-        }
+    /// All modes use ffmpeg for output or input validation.
+    pub(crate) fn require_ffmpeg(&self) -> AppResult<&Path> {
+        self.ffmpeg.as_deref().ok_or_else(||
+            "Missing tool: ffmpeg (required for video validation; install ffmpeg or place it in tools/)".to_string()
+        )
     }
 }
 
@@ -146,7 +137,9 @@ pub(crate) fn build_runtime(cli: &CliArgs) -> AppResult<(Runtime, Logger)> {
         .map(PathBuf::from)
         .unwrap_or_else(|_| script_dir.join("processing_log.txt"));
 
-    let output_dir = if let Ok(v) = env::var("DV8_EL_RPU_DIR") {
+    let output_dir = if let Some(path) = &cli.archive_dir {
+        path.clone()
+    } else if let Ok(v) = env::var("DV8_EL_RPU_DIR") {
         PathBuf::from(v)
     } else if Path::new("/NAS").is_dir() {
         PathBuf::from("/NAS/EL_RPU/")
@@ -172,11 +165,28 @@ pub(crate) fn build_runtime(cli: &CliArgs) -> AppResult<(Runtime, Logger)> {
 
     let ffmpeg = resolve_optional(&script_dir, "ffmpeg");
     let ffprobe = resolve_optional(&script_dir, "ffprobe");
-
-    let logger = Logger::new(log_file.clone(), cli.debug);
+    let logger = Logger::new(
+        log_file.clone(),
+        cli.debug,
+        cli.progress,
+        if cli.repair_sync_offset.is_some() {
+            21
+        } else if cli.checker_mode {
+            6
+        } else if cli.hybrid_mode {
+            15
+        } else {
+            6
+        },
+    );
     logger.rotate_log();
 
-    if cli.save_el_rpu && !cli.dry_run && !cli.hybrid_mode {
+    if cli.save_el_rpu
+        && !cli.dry_run
+        && !cli.hybrid_mode
+        && !cli.checker_mode
+        && cli.repair_sync_offset.is_none()
+    {
         fs::create_dir_all(&output_dir)
             .map_err(|e| format!("Cannot create archive dir {}: {e}", output_dir.display()))?;
     }
@@ -191,6 +201,8 @@ pub(crate) fn build_runtime(cli: &CliArgs) -> AppResult<(Runtime, Logger)> {
         dovi_tool,
         ffmpeg,
         ffprobe,
+        tmp_dir: cli.tmp_dir.clone(),
+        hwaccel: cli.hwaccel,
         save_el_rpu: cli.save_el_rpu,
         dry_run: cli.dry_run,
     };

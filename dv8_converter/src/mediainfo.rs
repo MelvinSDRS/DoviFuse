@@ -45,7 +45,7 @@ pub(crate) fn parse_float(s: &str) -> Option<f64> {
     if cleaned.is_empty() {
         return None;
     }
-    cleaned.parse::<f64>().ok()
+    cleaned.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 pub(crate) fn parse_mastering_luminance(raw: &str) -> (Option<f64>, Option<f64>) {
@@ -90,11 +90,11 @@ pub(crate) fn parse_mastering_luminance(raw: &str) -> (Option<f64>, Option<f64>)
 
 pub(crate) fn fps_from_info(info: &HybridMediaInfo) -> Option<f64> {
     if let (Some(num), Some(den)) = (info.frame_rate_num, info.frame_rate_den) {
-        if den > 0.0 {
+        if den > 0.0 && num > 0.0 && num.is_finite() && den.is_finite() {
             return Some(num / den);
         }
     }
-    info.frame_rate
+    info.frame_rate.filter(|v| v.is_finite() && *v > 0.0)
 }
 
 /// Resolve the mkvextract track ID of the first HEVC video track using
@@ -116,16 +116,23 @@ pub(crate) fn get_hevc_track_id(file: &Path, rt: &Runtime, logger: &Logger) -> A
         .and_then(|t| t.as_array())
         .ok_or_else(|| format!("No tracks in mkvmerge -J output for {}", file.display()))?;
 
-    // Prefer the first HEVC video track; fall back to the first video track.
-    let mut first_video: Option<u64> = None;
+    // All decoding, RPU extraction and probing must describe the same video.
+    // Multi-video remuxing needs explicit selection and preservation support.
+    if tracks
+        .iter()
+        .filter(|t| t.get("type").and_then(|v| v.as_str()) == Some("video"))
+        .count()
+        != 1
+    {
+        return Err(
+            "Exactly one video track is required; multi-video inputs are unsupported".to_string(),
+        );
+    }
     for t in tracks {
         if t.get("type").and_then(|v| v.as_str()) != Some("video") {
             continue;
         }
         let id = t.get("id").and_then(|v| v.as_u64());
-        if first_video.is_none() {
-            first_video = id;
-        }
         let codec_id = t
             .get("properties")
             .and_then(|p| p.get("codec_id"))
@@ -138,7 +145,14 @@ pub(crate) fn get_hevc_track_id(file: &Path, rt: &Runtime, logger: &Logger) -> A
         }
     }
 
-    first_video.ok_or_else(|| format!("No video track found in {}", file.display()))
+    Err(format!("No HEVC video track found in {}", file.display()))
+}
+
+pub(crate) fn has_hdr10_base(info: &HybridMediaInfo) -> bool {
+    let transfer = info.transfer_characteristics.to_ascii_lowercase();
+    info.bit_depth == Some(10)
+        && info.colour_primaries.contains("2020")
+        && (transfer.contains("2084") || transfer == "pq")
 }
 
 /// Pick the video-track line the hybrid pipeline actually processes: the
@@ -212,7 +226,14 @@ pub(crate) fn hybrid_detect_dv_profile(
     rt: &Runtime,
     logger: &Logger,
 ) -> AppResult<Option<u8>> {
-    let out = run_capture(logger, &rt.mediainfo, &[file.as_os_str().to_os_string()])?;
+    let out = run_capture(
+        logger,
+        &rt.mediainfo,
+        &[
+            "--Output=Video;%HDR_Format%|%HDR_Format_Profile%|%CodecID%".into(),
+            file.as_os_str().to_os_string(),
+        ],
+    )?;
     let lower = out.to_lowercase();
 
     if lower.contains("dvhe.05") || lower.contains("profile 5") || lower.contains("profile: 5") {
@@ -232,6 +253,29 @@ pub(crate) fn hybrid_detect_dv_profile(
     Ok(None)
 }
 
+pub(crate) fn hybrid_get_hdr_compatibility(
+    file: &Path,
+    rt: &Runtime,
+    logger: &Logger,
+) -> AppResult<String> {
+    let args = vec![
+        OsString::from("--Output=Video;%HDR_Format_Compatibility%\\n"),
+        file.as_os_str().to_os_string(),
+    ];
+    let out = run_capture(logger, &rt.mediainfo, &args)?;
+    Ok(out
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("")
+        .trim()
+        .to_string())
+}
+
+pub(crate) fn is_hdr10_compatible(hdr_format: &str, compatibility: &str) -> bool {
+    let combined = format!("{hdr_format} {compatibility}").to_ascii_lowercase();
+    combined.contains("hdr10") || combined.contains("smpte st 2084")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,6 +291,15 @@ mod tests {
     fn mastering_luminance_missing() {
         assert_eq!(parse_mastering_luminance(""), (None, None));
         assert_eq!(parse_mastering_luminance("max: 1000"), (None, None));
+    }
+
+    #[test]
+    fn hdr10_compatibility_can_be_reported_in_a_separate_field() {
+        assert!(is_hdr10_compatible(
+            "Dolby Vision / SMPTE ST 2094 App 4",
+            "HDR10 / HDR10+ Profile B"
+        ));
+        assert!(!is_hdr10_compatible("Dolby Vision", ""));
     }
 
     #[test]

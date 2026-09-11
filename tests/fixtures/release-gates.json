@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "gates": [
+    {
+      "id": "full-length-performance",
+      "status": "pending",
+      "required_evidence": "Authorized full-length copies: runtime, peak memory, scratch usage and cancellation latency.",
+      "evidence": []
+    },
+    {
+      "id": "dolby-playback-qc",
+      "status": "pending",
+      "required_evidence": "Manual Dolby-capable playback for highlights, dark scenes, sync and aspect ratio changes.",
+      "evidence": []
+    },
+    {
+      "id": "container-preservation",
+      "status": "pending",
+      "required_evidence": "Independent manifests and extracted hashes for audio, subtitles, chapters, attachments, video metadata and timestamps.",
+      "evidence": []
+    },
+    {
+      "id": "app-report-consistency",
+      "status": "pending",
+      "required_evidence": "Report identity, inconclusive results, source retention, repair binding and output-drain completion ordering.",
+      "evidence": []
+    }
+  ],
+  "workflow": "p7-p8-only",
+  "p5_hybrid": "disabled"
+}

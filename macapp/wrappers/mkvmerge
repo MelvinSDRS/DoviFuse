@@ -1,0 +1,3 @@
+#!/bin/sh
+TOOLS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$TOOLS_DIR/../vendor/MKVToolNix/mkvmerge" "$@"
