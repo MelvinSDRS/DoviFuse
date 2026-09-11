@@ -45,15 +45,15 @@
   },
   "candidate": {
     "linux_suite": "passed",
-    "rust_tests": 100,
+    "rust_tests": 102,
     "l5_example_tests": 4,
     "clippy": "passed without warnings",
     "mac_build": "BUILD SUCCEEDED; signature verified",
     "mac_suite": "passed",
-    "actual_app_report_replays": 46,
+    "actual_app_report_replays": 49,
     "linux_faults": {
       "kind": "synthetic-fault-injection",
-      "binary_sha256": "a60d20163dd1dde9055705c27f80a514ce3cc3a0ae6a2aed679d811de024f913",
+      "binary_sha256": "ca34cacde900e0f889ab873bd47f2260f5e2bb4ead487643344983b05723bc25",
       "cases": [
         {
           "case": "cancel-capture-descendants",
@@ -72,7 +72,7 @@
         },
         {
           "case": "simultaneous-output-reservation",
-          "failure_or_cancellation_seconds": 0.575,
+          "failure_or_cancellation_seconds": 0.566,
           "status": "passed"
         },
         {
@@ -82,7 +82,7 @@
         },
         {
           "case": "leader-exit-pipe-held",
-          "failure_or_cancellation_seconds": 2.022,
+          "failure_or_cancellation_seconds": 2.071,
           "status": "passed"
         },
         {
@@ -92,7 +92,7 @@
         },
         {
           "case": "conversion-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.007,
           "status": "passed"
         },
         {
@@ -102,22 +102,22 @@
         },
         {
           "case": "decode-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.032,
           "status": "passed"
         },
         {
           "case": "scratch-disappeared",
-          "failure_or_cancellation_seconds": 0.114,
+          "failure_or_cancellation_seconds": 0.117,
           "status": "passed"
         },
         {
           "case": "archive-disappeared",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.009,
           "status": "passed"
         },
         {
           "case": "replacement-readonly",
-          "failure_or_cancellation_seconds": 0.114,
+          "failure_or_cancellation_seconds": 0.266,
           "status": "passed"
         },
         {
@@ -127,7 +127,7 @@
         },
         {
           "case": "source-changed-before-replacement",
-          "failure_or_cancellation_seconds": 0.064,
+          "failure_or_cancellation_seconds": 0.115,
           "status": "passed"
         },
         {
@@ -137,12 +137,12 @@
         },
         {
           "case": "hybrid-injection-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.007,
           "status": "passed"
         },
         {
           "case": "hybrid-remux-io-error",
-          "failure_or_cancellation_seconds": 0.015,
+          "failure_or_cancellation_seconds": 0.0,
           "status": "passed"
         },
         {
@@ -163,7 +163,7 @@
     },
     "mac_faults": {
       "kind": "synthetic-fault-injection",
-      "binary_sha256": "9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a",
+      "binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
       "cases": [
         {
           "case": "cancel-capture-descendants",
@@ -177,12 +177,12 @@
         },
         {
           "case": "cancel-version-probe",
-          "failure_or_cancellation_seconds": 0.047,
+          "failure_or_cancellation_seconds": 0.089,
           "status": "passed"
         },
         {
           "case": "simultaneous-output-reservation",
-          "failure_or_cancellation_seconds": 0.576,
+          "failure_or_cancellation_seconds": 0.647,
           "status": "passed"
         },
         {
@@ -192,17 +192,17 @@
         },
         {
           "case": "leader-exit-pipe-held",
-          "failure_or_cancellation_seconds": 2.073,
+          "failure_or_cancellation_seconds": 2.056,
           "status": "passed"
         },
         {
           "case": "extraction-io-error",
-          "failure_or_cancellation_seconds": 0.004,
+          "failure_or_cancellation_seconds": 0.011,
           "status": "passed"
         },
         {
           "case": "conversion-error",
-          "failure_or_cancellation_seconds": 0.011,
+          "failure_or_cancellation_seconds": 0.0,
           "status": "passed"
         },
         {
@@ -232,17 +232,17 @@
         },
         {
           "case": "report-replaced-after-validation",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.047,
           "status": "passed"
         },
         {
           "case": "source-changed-before-replacement",
-          "failure_or_cancellation_seconds": 0.005,
+          "failure_or_cancellation_seconds": 0.047,
           "status": "passed"
         },
         {
           "case": "hybrid-edit-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.011,
           "status": "passed"
         },
         {
@@ -252,12 +252,12 @@
         },
         {
           "case": "hybrid-remux-io-error",
-          "failure_or_cancellation_seconds": 0.0,
+          "failure_or_cancellation_seconds": 0.011,
           "status": "passed"
         },
         {
           "case": "checker-decode-error",
-          "failure_or_cancellation_seconds": 0.023,
+          "failure_or_cancellation_seconds": 0.011,
           "status": "passed"
         },
         {
@@ -271,7 +271,7 @@
         "No power-loss or uninterruptible kernel I/O guarantee."
       ]
     },
-    "mac_binary_sha256": "9cca2b6b9471099537c02b16f7690ef5ed449ded453544cd0f646dd7217bad0a",
+    "mac_binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
     "native_mac_storage": {
       "kind": "native-filesystem-failure",
       "filesystem": "isolated 16 MiB HFS+ image",
@@ -283,13 +283,14 @@
       "production_volumes_modified": false
     },
     "archive_cancellation": "Unit regression cancels after copying begins, removes partial archive, preserves source and retries successfully; native ENOSPC/retry passed",
-    "swift_concurrency": "Explicit Swift 6 / complete concurrency checking; 46 actual report replays passed after per-callback weak-capture fix",
+    "swift_concurrency": "Swift 6 complete concurrency checks; 49 report replays passed on the user Mac with optional native SMB controls (46 without SMB)",
     "hosted_ci": {
       "commit": "cb4544d9ee2b576f53084dee23fc53892346c205",
       "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34546967687",
       "linux": "passed",
       "mac_apple_silicon": "passed",
-      "publication": "not run; release gates remain pending"
+      "publication": "not run; release gates remain pending",
+      "scope": "Passed before SMB sync fix; new code CI pending"
     },
     "native_app_interruption": {
       "kind": "native-AppModel-host-force-kill",
@@ -332,8 +333,13 @@
       "installed_location": "user Applications/DV8 Maker.app",
       "installed_smoke_cases": 22
     },
-    "latest_verified_mac_binary_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
-    "latest_verified_mac_binary_status": "Built, full bundled Mac suite passed, installed with rollback, signed, 22 installed smoke cases passed and app relaunched"
+    "latest_verified_mac_binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
+    "latest_verified_mac_binary_status": "SMB sync fix built and complete bundled Mac suite passed, including 3 native SMB controls and 49 app replays; installation pending",
+    "smb_sync": {
+      "evidence": "docs/evidence/2026-09-10-smb-sync.json",
+      "native_cases": "passed",
+      "full_length_retry": "pending"
+    }
   },
   "observed_limits": [
     "Synthetic fixtures validate mechanics, not creative grade equivalence.",
@@ -350,7 +356,7 @@
     "dv8_converter/src/enhancement.rs": "2d8a902a38abada56aff3dfde9ec78d769ac459722f7b0a377c8b06271d5f694",
     "dv8_converter/src/exec.rs": "14880f97024afbebd193c5f04d8560bd01563fdbe50f2de4e541ced38a9f6a50",
     "dv8_converter/src/ffmpeg.rs": "5ed7ccf8c9ea5c7b89b7546f4b9047501a2e172a0cee6429793f099c717fa708",
-    "dv8_converter/src/fsutil.rs": "c51371e6d9466d8db5f5f280fce5a9f97a576228e642bdce5d060efaf28ebbac",
+    "dv8_converter/src/fsutil.rs": "df0f2bd85ec430076e3e3ad663deb475e2f84b1b6e9ac271fddd69c15ed77295",
     "dv8_converter/src/hybrid/active_area.rs": "46ada34db7d35e27104577fd7a25315e6025528db6ead00b4e56cdb487412b14",
     "dv8_converter/src/hybrid/align.rs": "e884afb31e083ff0210ae05627fc4d0b2d658a27901947a734defc25a7b2ab84",
     "dv8_converter/src/hybrid/editor.rs": "28c76cffd4b52375aaeb33fd2007667492bb518245562519b684e4ed9c946e9a",
@@ -366,7 +372,7 @@
     "dv8_converter/src/mediainfo.rs": "1ebdf03b0460f94174f3319c4dc80f11f225ee87ff486c02d22e7007b5dd5dfb",
     "dv8_converter/src/pq.rs": "66f2e57ebdcd0cf68c89d68502f4a76e45db54901207b4173215d53257a59bc1",
     "dv8_converter/src/remux.rs": "5f4314c14d828559c4b5dcdb9f94cefc9931714c2fc65de42892705b13083a2f",
-    "dv8_converter/src/report.rs": "3720943915ac61c16bc38d96bfefa0632ad594f5a4606bf468efcc5f0785564d",
+    "dv8_converter/src/report.rs": "dffed3a08daf7fa0b54c55a75efb3d445c0c10b388282173a263443caae14b8b",
     "dv8_converter/src/runtime.rs": "5ac62d6ebf4f17a4af22962a1f41d72a5682fb9afb2ed33069290c9472fbfaa8",
     "dv8_converter/src/standard.rs": "a5d0eb038500fc2b37b8ba6879f2833d144461999f5a5dcfe26dfc74a27f0302",
     "macapp/Tests/AppModelAuditTests.swift": "e8ae18ca560c421a6fb812497ff57859dcb180d8735a180659ed0d33109826ce",
@@ -374,14 +380,15 @@
     "scripts/audit_faults.py": "f8fb94d05a32d8d4d01875c67e98973d14f94938df91a55063605aac701ab58d",
     "scripts/stability_measure.py": "57e4f7203694cc1c7717032c551f17bdf53bec3c6204ac52236f54d18b3623ba",
     "scripts/test-linux.sh": "8abd85cc9c39b97da329df8de6ff0a9076f931f4216f937fcc9bf39f5f19a237",
-    "scripts/test-macos-bundle.sh": "e68e8abc815b33be1d9d1264f6895460053aeee885bf572b5c6c7f8c1d6e8ce0",
+    "scripts/test-macos-bundle.sh": "e9c3c9aa192ab43d4deb3e006a2ce22ac5b9113582737fcac69123e6e3057e8d",
     "scripts/audit_macos_storage.py": "2e2c0f338f2409e845aa3c0cc28a3394c632b8a55348afc2cff121eedaf86703",
     "macapp/DV8Maker/AppModel.swift": "fb656dc9339fb804390742a3ea8fc0f43c41f97a7e0f6a1a1db345f6c14d7a6a",
     "macapp/DV8Maker.xcodeproj/project.pbxproj": "74a6f72beffc2013c8553d7bb10dc8716bc6654d5c1aaa1cdc79fc4deca50b1a",
     "macapp/build-macos-app.sh": "1c18ad1f7d4b42dd4c1e5142d225f31c762cee9313f6b59e4a6fb3921a8d9465",
     "scripts/audit_preservation.py": "8e28f036dfa684581a7019aafa43feda0ab5df650068086e9af01600e8b649e9",
     "scripts/audit_macos_app_crash.py": "31bf467284e6e8ed96d9ce698fa56b8868b322246518cc3d6c4b83bac04620ef",
-    "macapp/Tests/AppCrashAuditHost.swift": "e47db660eac0a667df3f222b30c07a087f7575eb9ecab53e5e9abf6a6a638187"
+    "macapp/Tests/AppCrashAuditHost.swift": "e47db660eac0a667df3f222b30c07a087f7575eb9ecab53e5e9abf6a6a638187",
+    "scripts/audit_macos_smb.py": "ebcfc5000508f3e75991b644aeca9fa5608564698d0de40e5f64ddef153fe55a"
   },
   "local_log_sha256": {
     "dv8-stability-linux-final.log": "44efce8ff82325e438da1fd3da2427ea21a7da62af5949dc07abd074d5de4f38",
@@ -403,7 +410,10 @@
     "hosted-compat-final.log": "3ebd5e7f4f36b330d2786bbe0f963e3a755ea46ba2be8dd68ec25570d7a64c15",
     "dv8-stability-build-compat.log": "d9a0c39e469293e0b45c56312a2734d818f5bbf047469eeb237829d59e6e03ea",
     "dv8-stability-mac-compat.log": "f44a2ae023e69e6f5079b22348ca32f9d0ebc2b97114e4042eb910914d99bb55",
-    "installed-smoke-compat.log": "5adc0889187cac599f5f021f9b3f56a24ddb662320c95ce69046f6553eb40191"
+    "installed-smoke-compat.log": "5adc0889187cac599f5f021f9b3f56a24ddb662320c95ce69046f6553eb40191",
+    "dv8-stability-build-smb-sync.log": "445a4c62157a407a5e2f575d3f99723458a9056d25b6eeadd162dd47bf790459",
+    "dv8-stability-mac-smb-sync.log": "4c7e8dc70bbde7e308c085448272321980910ccb73ebff6fc15e06d343478a37",
+    "linux-smb-sync.log": "19a33d3915c2c893cf2a92209a2d719da193b34d752da3c86c8b55a66dc11f52"
   },
   "performance_control": {
     "basis_commit": "71739e599efe57905719237046b710a0175a00ef",

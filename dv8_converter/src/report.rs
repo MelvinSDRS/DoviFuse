@@ -171,7 +171,7 @@ impl JobReport {
             .seek(SeekFrom::Start(0))
             .and_then(|_| self.file.write_all(&bytes))
             .and_then(|_| self.file.set_len(bytes.len() as u64))
-            .and_then(|_| self.file.sync_all())
+            .and_then(|_| crate::fsutil::sync_file(&self.file))
             .map_err(|e| format!("Cannot save report {}: {e}", self.path.display()))
     }
     pub(crate) fn finish(&mut self, result: &AppResult<()>, cancelled: bool) -> AppResult<Value> {

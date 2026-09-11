@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-10",
+  "kind": "native-macos-SMB-regression",
+  "before_binary_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
+  "after_binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
+  "before_cases": [
+    {
+      "case": "smb-archive",
+      "status": "failed",
+      "exit_status": 1
+    },
+    {
+      "case": "smb-report-success",
+      "status": "failed",
+      "exit_status": 1
+    },
+    {
+      "case": "smb-report-failure",
+      "status": "failed",
+      "exit_status": 1
+    }
+  ],
+  "after_cases": [
+    {
+      "case": "smb-archive",
+      "exit_status": 0,
+      "status": "passed",
+      "execution": "completed",
+      "validation": "warn"
+    },
+    {
+      "case": "smb-report-success",
+      "exit_status": 0,
+      "status": "passed",
+      "execution": "completed",
+      "validation": "pass"
+    },
+    {
+      "case": "smb-report-failure",
+      "exit_status": 1,
+      "status": "passed",
+      "execution": "failed",
+      "validation": "fail"
+    }
+  ],
+  "probe": {
+    "bytes": 8192,
+    "write": "passed",
+    "permissions": "passed",
+    "rust_sync_all": "ENOTSUP (45)",
+    "posix_fsync": "passed",
+    "local_control": "all operations passed"
+  },
+  "fix": "macOS ENOTSUP from full synchronization falls back to POSIX fsync; other failures and fallback errors still fail the operation",
+  "full_length_failure": {
+    "elapsed_seconds": 1112.48731225,
+    "source_retention": {
+      "sha256": "944d9d6e00df097494c856671b33a3e8f0a3db05d930c64ecca8b6d958d4bf7b",
+      "bytes": 48200052395,
+      "matches_initial_copy": true,
+      "unchanged_during_hash": true
+    },
+    "partial_archive_removed": true,
+    "remaining_scratch_bytes": 0,
+    "surviving_pids": []
+  },
+  "regressions": {
+    "rust_tests": 102,
+    "native_smb_cases": 3,
+    "mac_app_report_replays": 49,
+    "hosted_ci_scope": "Private SMB cases require opt-in on the user Mac; hosted suite retains 46 report replays"
+  },
+  "reproduction": "scripts/audit_macos_smb.py --destination-root <owned-SMB-audit-directory>; DV8_AUDIT_SMB_ROOT adds the controls to the complete Mac suite",
+  "limits": [
+    "Successful server/filesystem flush does not prove remote hardware power-loss durability.",
+    "Full-length retry and actual Dolby playback remain pending."
+  ],
+  "sources": [
+    "https://doc.rust-lang.org/src/std/sys/fs/unix.rs.html",
+    "https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html"
+  ],
+  "raw_evidence_sha256": {
+    "smb-before.json": "4d54ffbdc8b3ed955741be7d304ad137135e7fb2f3c2a63fb87f12d6d817d469",
+    "smb-after.json": "546c4cd071bf037b3449e94e6a8c6b913c63cddb39c33dd2d74c6da6f1fe7fd3",
+    "dv8-stability-build-smb-sync.log": "445a4c62157a407a5e2f575d3f99723458a9056d25b6eeadd162dd47bf790459",
+    "dv8-stability-mac-smb-sync.log": "4c7e8dc70bbde7e308c085448272321980910ccb73ebff6fc15e06d343478a37",
+    "linux-smb-sync.log": "19a33d3915c2c893cf2a92209a2d719da193b34d752da3c86c8b55a66dc11f52"
+  }
+}

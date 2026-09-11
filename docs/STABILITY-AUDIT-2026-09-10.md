@@ -65,6 +65,32 @@ and the installed version 101 passed. See
 [compatibility evidence](evidence/2026-09-10-mkvtoolnix-compatibility.json).
 The CLI identifier message also handles either behavior accurately.
 
+The first full-length candidate exposed an SMB synchronization regression in the
+new archive copier. It failed after 1,112.487 seconds with macOS error 45
+(`ENOTSUP`), before replacing the input. A full SHA-256 recheck confirmed the
+input unchanged; the partial archive and scratch were removed, with no surviving
+children. A disposable 8 KiB probe isolated `File::sync_all()` as the failure;
+writes, permissions and POSIX `fsync()` succeeded. A synthetic report on SMB
+reproduced the same issue in report persistence.
+
+[Rust's Apple implementation](https://doc.rust-lang.org/src/std/sys/fs/unix.rs.html)
+uses `F_FULLFSYNC`. Archive and report synchronization now fall back to POSIX
+`fsync()` on macOS only for the observed unsupported-operation error. Other
+errors, including EIO and ENOSPC, still propagate; failed fallback sync also
+fails the operation. This requests the filesystem/server's supported flush and
+does not prove remote hardware power-loss durability; see
+[Apple's fsync documentation](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html).
+
+The new `scripts/audit_macos_smb.py --destination-root <owned-SMB-audit-directory>`
+control independently compares archive payloads and checks successful and failed
+reports. Set the existing `DV8_AUDIT_RESOURCES`, `DV8_AUDIT_BIN` and
+`DV8_AUDIT_FIXTURES` variables; add `--baseline` to retain the three reproduced
+failures from the prior bundle. Set `DV8_AUDIT_SMB_ROOT` when running the complete
+Mac suite to include these controls and their app report replays. The script
+creates only a new disposable subdirectory on an already mounted SMB share.
+Hosted CI has no connection to the private NAS; native SMB evidence comes from
+the user's Mac. The fixed Linux and Mac suites passed, including 102 Rust tests, all three native SMB cases and 49 Mac app report replays. The full-length retry remains pending; see [SMB evidence](evidence/2026-09-10-smb-sync.json).
+
 ## Reproducible verification
 
 Run `scripts/test-linux.sh`, then build the Mac app and run
@@ -80,6 +106,30 @@ decode errors; scratch/archive disappearance; a read-only replacement directory;
 report replacement after output validation, and source changes before replacement. Existing suites cover truncated
 inputs, archive collisions, stale repair, header/payload preservation, P5 refusal,
 and the qBittorrent failure boundary.
+
+With `DV8_AUDIT_FIXTURES` set to prepared synthetic seeds and
+`DV8_AUDIT_BIN` set to the selected executable, reproduce one control with:
+
+```bash
+python3 scripts/audit_faults.py --case cancel-capture-descendants
+```
+
+Use the following case names for the other failure boundaries. For Mac bundle
+comparisons, also set `DV8_AUDIT_RESOURCES` to that bundle's `Contents/Resources`
+and put its `tools` directory first in `PATH`. Add `--baseline` to record an
+expected baseline failure without turning the harness result into a passing
+candidate claim; inspect the saved `summary.json` in either mode.
+
+| Boundary | Named controls in `audit_faults.py` |
+| --- | --- |
+| Cancellation and inherited pipes | `cancel-capture-descendants`, `cancel-status-descendants`, `cancel-version-probe`, `leader-exit-pipe-held` |
+| Concurrent jobs and interrupted restart | `simultaneous-output-reservation`, `crash-restart-refuses-stale-output` |
+| Extraction and conversion | `extraction-io-error`, `conversion-error` |
+| RPU editing and injection | `hybrid-edit-error`, `hybrid-injection-error`, `repair-injection-error` |
+| Remux and full decode | `remux-disk-full`, `hybrid-remux-io-error`, `decode-error`, `checker-decode-error` |
+| Missing work directories | `scratch-disappeared`, `archive-disappeared` |
+| Final replacement | `replacement-readonly`, `source-changed-before-replacement` |
+| Report failure after validated replacement | `report-replaced-after-validation` |
 
 ENOSPC and EIO are deterministic **tool-boundary injections**, not a physical NAS
 disconnect. Directory removal and permission changes affect only owned test
@@ -152,22 +202,25 @@ frame/RPU and supported container checks passed before replacement. The expected
 FEL reconstruction warning remains. Sampled process-tree RSS peaked at
 635,387,904 bytes and scratch at 82,870,679,022 bytes, below the
 101,768,812,544-byte estimate. No scratch files or child processes remained.
-The separate checker and final-candidate comparison are still required. A Mac
-build and regression suite overlapped initial extraction; retain that context
-when assessing runtime differences.
+The separate checker also passed in 1,502.300 seconds: 149,006 frames fully
+decoded, with all 239 detected picture cuts matched at offset zero (18% of RPU
+cuts; dominance 14.1). Its sampled RSS peaked at 685,146,112 bytes and scratch at
+24,587,099 bytes, with no leftovers or children. The final-candidate comparison
+is still required. A Mac build and regression suite overlapped the standard
+control's initial extraction; retain that context when assessing runtime differences.
 
 ## Action plan status
 
 | Work | Evidence and next acceptance step |
 | --- | --- |
 | Reproducible baseline | Complete: preserved executables, source hashes, Linux/Mac suites, independent media-copy checksums and hardware/storage record. |
-| Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 100 Rust tests, MakeMKV preservation controls and 46 actual app report replays. |
+| Demonstrated failure fixes | Complete for the tested cases: 20 fault scenarios on each platform, real isolated Mac ENOSPC/retry, 102 Rust tests, MakeMKV preservation controls, three native SMB archive/report controls and 49 actual app report replays. |
 | Native app interruption | Passed in an isolated native host using production AppModel: source/report retained, restart idle without false success, orphaned test job explicitly stopped by supervisor. UI file selection is outside this control. |
-| Full-length resource/performance matrix | P8 checker pair complete. FEL baseline exposed MakeMKV rejection; corrected FEL standard control completed with expected FEL warning and no leftover resources. Standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
+| Full-length resource/performance matrix | P8 checker pair complete. FEL baseline exposed MakeMKV rejection; corrected FEL standard and output checker controls completed with no leftover resources; only the standard report carries the expected FEL warning. The first FEL candidate failed archive synchronization on SMB with its input intact; the fix passed native regressions and requires a full retry. Standard FEL/MEL, same-source P7/P8 hybrid pairs and real-media cancellation remain. Review all reports, estimates and any repeatable runtime increase over 10%. |
 | Independent hybrid reference coverage | Pending: same-source positive controls cannot establish independent WEB/Blu-ray grade equivalence. Retain conservative grade, alignment and L5 refusals. |
 | Dolby playback QC | Pending user observations on Apple TV 4K / Infuse / LG C1 over SMB, with output identities and timestamps. |
-| Hosted CI | Passed for final code candidate `cb4544d9ee2b576f53084dee23fc53892346c205`: [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34546967687), including MKVToolNix 82/100 preservation controls. |
-| Mac installation | Final code candidate `cb4544d` installed after the active conversion finished, signed, passed 22 installed smoke cases and relaunched at 21:11 EDT, with preserved rollback. Converter SHA-256 `735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb`. Test queue resumed afterward. |
+| Hosted CI | SMB sync fix run pending. Passed for previous code candidate `cb4544d9ee2b576f53084dee23fc53892346c205`: [Linux and Apple Silicon run](https://github.com/MelvinSDRS/DV8/actions/runs/34546967687), including MKVToolNix 82/100 preservation controls. |
+| Mac installation | SMB sync fix installation pending. Previous code candidate `cb4544d` installed after the active conversion finished, signed, passed 22 installed smoke cases and relaunched at 21:11 EDT, with preserved rollback. Converter SHA-256 `735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb`. Test queue resumed afterward. |
 | Publication | Blocked by pending full-length and Dolby playback release gates. |
 
 ## Playback and release

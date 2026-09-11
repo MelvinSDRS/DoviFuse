@@ -357,6 +357,145 @@
         "Reference contains only the MakeMKV UID correction on the original baseline; it is not the final stability candidate.",
         "A Mac rebuild and bundled regression suite overlapped initial source extraction; investigate and repeat any candidate runtime increase above 10%.",
         "Separate output checker and candidate comparison still pending; no playback acceptance."
+      ],
+      "expected_archive_artifacts": [
+        {
+          "role": "source EL and RPU HEVC archive",
+          "bytes": 4551520707,
+          "observation": "Expected archive present after successful conversion; this stat observation is not a payload hash"
+        }
+      ]
+    },
+    {
+      "build": "corrected baseline reference",
+      "case": "full-length FEL output checker",
+      "input_origin": "Output of corrected baseline reference FEL standard conversion; filesystem identity retained in raw report",
+      "input_bytes": 43410480683,
+      "binary_sha256": "796b6c6cadc04bac50e0f7aa809e8d11b211e58ba0b18c58cf26c6c7aeb317d7",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 0,
+      "elapsed_seconds": 1502.30010425,
+      "peak_process_tree_rss_bytes_sampled": 685146112,
+      "peak_scratch_bytes_sampled": 24587099,
+      "sample_interval_seconds": 0.5,
+      "samples": 2810,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": [],
+      "execution": "completed",
+      "validation": "pass",
+      "checks": [
+        {
+          "detail": "Container is readable and contains an HEVC video track",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "container",
+          "label": "Matroska / HEVC structure",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Profile 8 detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "profile",
+          "label": "Dolby Vision profile",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "10-bit BT.2020, PQ \u2014 HDR10 / HDR10",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "hdr10",
+          "label": "HDR10 base layer",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Parsed 149006 RPU frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "rpu",
+          "label": "Dolby Vision RPU",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Video and RPU both contain 149006 frames",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "frames",
+          "label": "Frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Decoded 149006 video frames; RPU contains 149006",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decoded_frames",
+          "label": "Decoded frame count",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "Entire video decoded successfully; 239 scene changes detected",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "decode",
+          "label": "Full video decode",
+          "status": "pass",
+          "version": 1
+        },
+        {
+          "detail": "RPU and video scene changes align at offset 0 (239 matches, 18% of RPU cuts, dominance 14.1)",
+          "event": "check_result",
+          "fix_action": null,
+          "fix_value": null,
+          "key": "sync",
+          "label": "Metadata sync",
+          "status": "pass",
+          "version": 1
+        }
+      ],
+      "raw_measurement_sha256": "866f2457e7827818b8ef59cc197e3ed49c21c3a3210089efabc44e28b7b4cc28",
+      "raw_report_sha256": "3c693bebdc3fe7e920fe6843ed447e3ed6b4e9cc8de4ec8fea0209f32336c4ed",
+      "tools": [
+        {
+          "name": "dovi_tool",
+          "version": "dovi_tool 2.3.1"
+        },
+        {
+          "name": "mkvmerge",
+          "version": "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mkvextract",
+          "version": "mkvextract v100.0 ('Do Hot Girls Like Chords') 64-bit"
+        },
+        {
+          "name": "mediainfo",
+          "version": "MediaInfo Command line, \nMediaInfoLib - v26.05"
+        },
+        {
+          "name": "ffmpeg",
+          "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        },
+        {
+          "name": "ffprobe",
+          "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.3.25.1)"
+        }
+      ],
+      "limits": [
+        "Checks the reference output; candidate conversion/checker comparison and physical playback still pending.",
+        "239 detected picture cuts matched at offset zero; this covers 18% of the RPU cuts and does not establish visual grade equivalence."
       ]
     }
   ],
@@ -367,5 +506,46 @@
     "Resource peaks are process-tree RSS and file sizes sampled every 0.5 seconds.",
     "No manual Dolby playback observations received.",
     "Queued same-source P7/P8 hybrid controls test mechanics and performance; independent donor/target grade acceptance remains separate."
+  ],
+  "comparison_input_checks": [
+    {
+      "case": "FEL standard candidate",
+      "bytes": 48200052395,
+      "sha256": "944d9d6e00df097494c856671b33a3e8f0a3db05d930c64ecca8b6d958d4bf7b",
+      "independent_copy": true,
+      "matches_reference_initial_input": true,
+      "measured_binary_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
+      "scope": "Input preparation and live binary identity only; conversion acceptance pending",
+      "run": "fel-candidate-standard, before SMB sync correction"
+    }
+  ],
+  "failed_observations": [
+    {
+      "case": "FEL standard candidate before SMB sync correction",
+      "binary_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
+      "stage": "archive synchronization",
+      "error": "Operation not supported (os error 45)",
+      "execution": "failed",
+      "validation": "fail",
+      "input_bytes": 48200052395,
+      "input_retention": {
+        "sha256": "944d9d6e00df097494c856671b33a3e8f0a3db05d930c64ecca8b6d958d4bf7b",
+        "bytes": 48200052395,
+        "matches_initial_copy": true,
+        "unchanged_during_hash": true
+      },
+      "partial_archive_removed": true,
+      "raw_measurement_sha256": "60237fad672526eb7e06180c3cf4a5d3fed82029728532bd18b56259c639aac6",
+      "raw_report_sha256": "29ddda22b7e3ba66f1fa34fe83032daea30fa516eb66398049fc2fe2758bf465",
+      "platform": "macOS-27.0-arm64-arm-64bit",
+      "exit_status": 1,
+      "elapsed_seconds": 1112.48731225,
+      "peak_process_tree_rss_bytes_sampled": 168329216,
+      "peak_scratch_bytes_sampled": 48266954439,
+      "sample_interval_seconds": 0.5,
+      "samples": 2094,
+      "remaining_scratch_bytes": 0,
+      "surviving_pids": []
+    }
   ]
 }

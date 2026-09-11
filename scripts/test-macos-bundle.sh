@@ -44,6 +44,9 @@ PY
 "$PYTHON" "$ROOT/scripts/test_job_report.py"
 "$PYTHON" "$ROOT/scripts/audit_faults.py"
 "$PYTHON" "$ROOT/scripts/audit_macos_storage.py"
+if [[ -n ${DV8_AUDIT_SMB_ROOT:-} ]]; then
+  "$PYTHON" "$ROOT/scripts/audit_macos_smb.py" --destination-root "$DV8_AUDIT_SMB_ROOT"
+fi
 "$PYTHON" "$ROOT/scripts/audit_preservation.py"
 DV8_L5_TIMELINE_BIN="$ROOT/dv8_converter/target/release/examples/l5_timeline" \
   "$PYTHON" "$ROOT/scripts/audit_l5.py"

@@ -102,6 +102,48 @@ pub(crate) fn reserve_output(path: &Path) -> AppResult<()> {
         .map_err(|e| format!("Cannot reserve output {}: {e}", path.display()))
 }
 
+/// Request the strongest available file synchronization. Apple's F_FULLFSYNC
+/// is not supported by every filesystem (notably SMB); POSIX fsync still asks
+/// the filesystem/server to commit the file. Neither proves remote hardware
+/// power-loss durability.
+pub(crate) fn sync_file(file: &fs::File) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::fd::AsRawFd;
+        unsafe extern "C" {
+            fn fsync(fd: std::os::raw::c_int) -> std::os::raw::c_int;
+        }
+        macos_sync_with_fallback(
+            || file.sync_all(),
+            || loop {
+                // SAFETY: the borrowed File keeps this descriptor open.
+                if unsafe { fsync(file.as_raw_fd()) } == 0 {
+                    return Ok(());
+                }
+                let error = std::io::Error::last_os_error();
+                if error.kind() != std::io::ErrorKind::Interrupted {
+                    return Err(error);
+                }
+            },
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    file.sync_all()
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_sync_with_fallback(
+    full_sync: impl FnOnce() -> std::io::Result<()>,
+    filesystem_sync: impl FnOnce() -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    // Darwin ENOTSUP is 45; Rust currently classifies it as Uncategorized.
+    // Do not fall back on EIO, ENOSPC, permission errors, or arbitrary failures.
+    match full_sync() {
+        Err(error) if error.raw_os_error() == Some(45) => filesystem_sync(),
+        result => result,
+    }
+}
+
 pub(crate) fn move_to_dir(src: &Path, dir: &Path) -> AppResult<()> {
     move_to_dir_with_cancel(src, dir, crate::cancellation::requested)
 }
@@ -143,7 +185,7 @@ fn move_to_dir_with_cancel(src: &Path, dir: &Path, cancelled: impl Fn() -> bool)
         destination
             .set_permissions(source.metadata().map_err(|e| e.to_string())?.permissions())
             .map_err(|e| e.to_string())?;
-        destination.sync_all().map_err(|e| e.to_string())?;
+        sync_file(&destination).map_err(|e| format!("Cannot sync archive: {e}"))?;
         if cancelled() {
             return Err("Archive copy cancelled".into());
         }
@@ -184,6 +226,33 @@ pub(crate) fn collect_mkv_files(dir: &Path, out: &mut Vec<PathBuf>) -> AppResult
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn macos_unsupported_full_sync_requires_successful_filesystem_sync() {
+        let unsupported = || Err(std::io::Error::from_raw_os_error(45));
+        macos_sync_with_fallback(unsupported, || Ok(())).unwrap();
+        let error =
+            macos_sync_with_fallback(unsupported, || Err(std::io::Error::from_raw_os_error(5)))
+                .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(5));
+    }
+
+    #[test]
+    fn macos_full_sync_errors_are_not_hidden_by_fallback() {
+        for code in [5, 28, 9, 13] {
+            let error = macos_sync_with_fallback(
+                || Err(std::io::Error::from_raw_os_error(code)),
+                || panic!("Real sync errors must not use fallback"),
+            )
+            .unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(code));
+        }
+        macos_sync_with_fallback(
+            || Ok(()),
+            || panic!("Successful full sync needs no fallback"),
+        )
+        .unwrap();
+    }
 
     #[test]
     fn archive_cancel_after_copy_starts_preserves_source_and_removes_partial() {
