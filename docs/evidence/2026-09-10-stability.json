@@ -285,12 +285,12 @@
     "archive_cancellation": "Unit regression cancels after copying begins, removes partial archive, preserves source and retries successfully; native ENOSPC/retry passed",
     "swift_concurrency": "Swift 6 complete concurrency checks; 49 report replays passed on the user Mac with optional native SMB controls (46 without SMB)",
     "hosted_ci": {
-      "commit": "cb4544d9ee2b576f53084dee23fc53892346c205",
-      "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34546967687",
+      "commit": "463802d60d922b7c4df4d46bf69c67197d67985d",
+      "run": "https://github.com/MelvinSDRS/DV8/actions/runs/34554003264",
       "linux": "passed",
       "mac_apple_silicon": "passed",
       "publication": "not run; release gates remain pending",
-      "scope": "Passed before SMB sync fix; new code CI pending"
+      "scope": "Hosted suite: 102 Rust tests and 46 app replays; the user Mac additionally passed 3 native SMB cases and 49 app replays"
     },
     "native_app_interruption": {
       "kind": "native-AppModel-host-force-kill",
@@ -319,22 +319,22 @@
       "reproduction": "scripts/audit_preservation.py"
     },
     "installation": {
-      "candidate_commit": "cb4544d9ee2b576f53084dee23fc53892346c205",
+      "candidate_commit": "463802d60d922b7c4df4d46bf69c67197d67985d",
       "status": "installed, signature verified, smoke tests passed and app relaunched",
-      "installed_converter_sha256": "735c390fba18af1b604a90c13b8885d535986bae6bd744998a901dc91c2a84fb",
-      "installed_app_executable_sha256": "cd4eb47f8294136f6ade64bdc8dd9a134d7fae32360a9a99cb58b9dff147e56b",
-      "smoke_log_sha256": "5adc0889187cac599f5f021f9b3f56a24ddb662320c95ce69046f6553eb40191",
+      "installed_converter_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
+      "installed_app_executable_sha256": "454a1cef038d3655d2b81033ffaf88f6ef992dadabc9574efbfdcd1a9e61bacc",
+      "smoke_log_sha256": "2f164d991a2c55ca956f9e5c716cdebe2801746c95188880216e8617bf48ad7e",
       "app_pids": [
-        79739
+        1907
       ],
       "signature": "passed deep strict after smoke tests",
-      "installed_at": "2026-09-10T21:11:40-0400",
+      "installed_at": "2026-09-10T22:18:07-0400",
       "rollback_preserved": true,
       "installed_location": "user Applications/DV8 Maker.app",
       "installed_smoke_cases": 22
     },
     "latest_verified_mac_binary_sha256": "67600b6e5252d3f2132685974b6c6387e64885038bec38d7a863dd693eaddb64",
-    "latest_verified_mac_binary_status": "SMB sync fix built and complete bundled Mac suite passed, including 3 native SMB controls and 49 app replays; installation pending",
+    "latest_verified_mac_binary_status": "SMB fix installed, signature verified, 22 installed smoke cases passed and app relaunched; full-length retry running",
     "smb_sync": {
       "evidence": "docs/evidence/2026-09-10-smb-sync.json",
       "native_cases": "passed",
@@ -413,7 +413,9 @@
     "installed-smoke-compat.log": "5adc0889187cac599f5f021f9b3f56a24ddb662320c95ce69046f6553eb40191",
     "dv8-stability-build-smb-sync.log": "445a4c62157a407a5e2f575d3f99723458a9056d25b6eeadd162dd47bf790459",
     "dv8-stability-mac-smb-sync.log": "4c7e8dc70bbde7e308c085448272321980910ccb73ebff6fc15e06d343478a37",
-    "linux-smb-sync.log": "19a33d3915c2c893cf2a92209a2d719da193b34d752da3c86c8b55a66dc11f52"
+    "linux-smb-sync.log": "19a33d3915c2c893cf2a92209a2d719da193b34d752da3c86c8b55a66dc11f52",
+    "installed-smoke-smb-sync.log": "2f164d991a2c55ca956f9e5c716cdebe2801746c95188880216e8617bf48ad7e",
+    "hosted-smb-sync.log": "ddb4c5643127c0b6b1e0711d9e74efb32dea8acdf07ccdf0df9617808187403c"
   },
   "performance_control": {
     "basis_commit": "71739e599efe57905719237046b710a0175a00ef",
