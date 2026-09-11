@@ -121,6 +121,11 @@ for label in ['standard','hybrid']:
 # payloads and the actual chapter/tag references, rather than discarding UID
 # comparisons for every container or requiring MakeMKV's old numeric values.
 propedit = shutil.which('mkvpropedit') or str(RESOURCES/'vendor/MKVToolNix/mkvpropedit')
+version=run(['mkvmerge','--version'],'makemkv-tool-version').stdout
+major=int(re.search(r'\bv(\d+)\.',version).group(1))
+# Automatic MakeMKV track-UID regeneration was introduced with v84. The
+# Ubuntu 24.04 suite also covers v82, which legitimately retains those UIDs.
+regenerates_uids=major>=84
 for label in ['standard', 'hybrid']:
     source=WORK/(label+'-makemkv.mkv')
     shutil.copyfile(WORK/(label+'-original.mkv'),source)
@@ -141,7 +146,7 @@ for label in ['standard', 'hybrid']:
     run(command,label+'-makemkv-convert')
     after=snapshot(output,label+'-makemkv-after')
     new_uid=manifest(output)['tracks'][0]['properties']['uid']
-    require(new_uid!=audio_uid,'Fixture did not trigger MakeMKV UID regeneration')
+    require((new_uid!=audio_uid)==regenerates_uids,'Unexpected MakeMKV UID behavior for '+version.strip())
     for value in [before,after]:
         for track in value['track_headers']: track.pop('uid',None)
     for key in ['track_headers','streams','attachments','title','base_layer_vcl']:
@@ -165,7 +170,8 @@ for label in ['standard', 'hybrid']:
     require(observed=={'AUDIT_LABEL':('preserve-audio',str(new_uid),None),
                        'AUDIT_CHAPTER':('preserve-chapter',None,chapter_uids['Suite'])},label+': MakeMKV tag targets/content changed')
     if label=='hybrid':require(digest(source)==source_hash,'MakeMKV hybrid source changed')
-    results[label+'-makemkv']={'payloads':'matched','track_uids':'regenerated as documented',
+    results[label+'-makemkv']={'payloads':'matched','mkvmerge_version':version.strip(),
+                              'track_uids':'regenerated as documented' if regenerates_uids else 'retained by MKVToolNix before v84',
                               'chapter_and_tag_references':'remapped correctly','chapter_content':'preserved'}
 
 # A successful mux that loses a header must still fail before source replacement/deletion.

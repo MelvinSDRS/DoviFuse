@@ -57,6 +57,14 @@ verify payload hashes, timestamps, chapter content, and actual chapter/tag
 reference remapping. Runtime header checks do not imply a full payload hash of
 every production track.
 
+Hosted Ubuntu uses MKVToolNix 82, which retains MakeMKV track UIDs; automatic
+regeneration starts with version 84. The preservation fixture now checks the
+documented behavior for each version and still verifies the content and linked
+references. Both version 82 (extracted into an isolated local tool directory)
+and the installed version 101 passed. See
+[compatibility evidence](evidence/2026-09-10-mkvtoolnix-compatibility.json).
+The CLI identifier message also handles either behavior accurately.
+
 ## Reproducible verification
 
 Run `scripts/test-linux.sh`, then build the Mac app and run

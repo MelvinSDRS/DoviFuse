@@ -1,0 +1,101 @@
+{
+  "date": "2026-09-10",
+  "problem": "Hosted Ubuntu uses MKVToolNix 82; the new fixture incorrectly expected numeric UID regeneration in all versions. Versions before 84 keep MakeMKV track UIDs.",
+  "fix": "Require the documented behavior for each major version; retain payload, timestamp, chapter and tag reference checks. Make CLI identifier message accurate for both behaviors.",
+  "hosted_failure": "https://github.com/MelvinSDRS/DV8/actions/runs/34546006549",
+  "local_verification": [
+    {
+      "version": "82",
+      "result": {
+        "standard": {
+          "metadata": "preserved",
+          "audio_subtitles_attachments_sha256": "matched",
+          "base_layer_vcl": {
+            "count": 259,
+            "sha256": "6b73bc6b8d29a73e50c897095bcabc2037da12900a1d13c96c1c1d04e3fb5dfc"
+          },
+          "chapters_xml": "matched",
+          "track_timestamps": "within 1ms",
+          "tracks": 3
+        },
+        "hybrid": {
+          "metadata": "preserved",
+          "audio_subtitles_attachments_sha256": "matched",
+          "base_layer_vcl": {
+            "count": 1090,
+            "sha256": "7f527c805747a72b3dc8b868bcb4e97eefdf0d9eff9d50050f3571b6f70ae56c"
+          },
+          "chapters_xml": "matched",
+          "track_timestamps": "within 1ms",
+          "tracks": 3
+        },
+        "standard-makemkv": {
+          "payloads": "matched",
+          "mkvmerge_version": "mkvmerge v82.0 ('I'm The President') 64-bit",
+          "track_uids": "retained by MKVToolNix before v84",
+          "chapter_and_tag_references": "remapped correctly",
+          "chapter_content": "preserved"
+        },
+        "hybrid-makemkv": {
+          "payloads": "matched",
+          "mkvmerge_version": "mkvmerge v82.0 ('I'm The President') 64-bit",
+          "track_uids": "retained by MKVToolNix before v84",
+          "chapter_and_tag_references": "remapped correctly",
+          "chapter_content": "preserved"
+        },
+        "standard-lost-header": "rejected; sources preserved",
+        "hybrid-lost-header": "rejected; sources preserved"
+      },
+      "log_sha256": "7589ffdf33cf28be6bba089f99979c57e845da11b358f7cbd8378082e0efa529"
+    },
+    {
+      "version": "101",
+      "result": {
+        "standard": {
+          "metadata": "preserved",
+          "audio_subtitles_attachments_sha256": "matched",
+          "base_layer_vcl": {
+            "count": 259,
+            "sha256": "6b73bc6b8d29a73e50c897095bcabc2037da12900a1d13c96c1c1d04e3fb5dfc"
+          },
+          "chapters_xml": "matched",
+          "track_timestamps": "within 1ms",
+          "tracks": 3
+        },
+        "hybrid": {
+          "metadata": "preserved",
+          "audio_subtitles_attachments_sha256": "matched",
+          "base_layer_vcl": {
+            "count": 1090,
+            "sha256": "7f527c805747a72b3dc8b868bcb4e97eefdf0d9eff9d50050f3571b6f70ae56c"
+          },
+          "chapters_xml": "matched",
+          "track_timestamps": "within 1ms",
+          "tracks": 3
+        },
+        "standard-makemkv": {
+          "payloads": "matched",
+          "mkvmerge_version": "mkvmerge v101.0 ('Time To Turn') 64-bit",
+          "track_uids": "regenerated as documented",
+          "chapter_and_tag_references": "remapped correctly",
+          "chapter_content": "preserved"
+        },
+        "hybrid-makemkv": {
+          "payloads": "matched",
+          "mkvmerge_version": "mkvmerge v101.0 ('Time To Turn') 64-bit",
+          "track_uids": "regenerated as documented",
+          "chapter_and_tag_references": "remapped correctly",
+          "chapter_content": "preserved"
+        },
+        "standard-lost-header": "rejected; sources preserved",
+        "hybrid-lost-header": "rejected; sources preserved"
+      },
+      "log_sha256": "167eaeffc76d30fbc71cd62b17ce08a8a41fe40d170a5b2fa154df86d76d5d7d"
+    }
+  ],
+  "sources_sha256": {
+    "dv8_converter/src/remux.rs": "5f4314c14d828559c4b5dcdb9f94cefc9931714c2fc65de42892705b13083a2f",
+    "scripts/audit_preservation.py": "8e28f036dfa684581a7019aafa43feda0ab5df650068086e9af01600e8b649e9"
+  },
+  "scope": "Compatibility regression controls; not full-length or Dolby playback acceptance"
+}
