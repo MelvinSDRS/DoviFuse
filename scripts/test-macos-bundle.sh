@@ -41,6 +41,7 @@ print('Passed: bundled Rust license notices', len(notices))
 PY
 "$PYTHON" "$ROOT/scripts/audit_smoke.py"
 "$PYTHON" "$ROOT/scripts/test_donor_eligibility.py"
+"$PYTHON" "$ROOT/scripts/test_mapping_policy.py"
 "$PYTHON" "$ROOT/scripts/test_p5_disabled.py"
 "$PYTHON" "$ROOT/scripts/audit_standard_source.py"
 "$PYTHON" "$ROOT/scripts/test_job_report.py"

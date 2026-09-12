@@ -5,6 +5,7 @@ pub(crate) mod editor;
 pub(crate) mod grade;
 pub(crate) mod l5;
 pub(crate) mod letterbox;
+mod mapping;
 pub(crate) mod preflight;
 pub(crate) mod scenes;
 pub(crate) mod validate;
@@ -288,6 +289,7 @@ fn process_hybrid_impl(
     let dv_scenes_txt = tmp_dir.join(format!("{base}.hybrid.dv_scenes.txt"));
     let hdr_scenes_txt = tmp_dir.join(format!("{base}.hybrid.hdr_scenes.txt"));
     let hybrid_l5_json = tmp_dir.join(format!("{base}.hybrid.l5.json"));
+    let mapping_json = tmp_dir.join(format!("{base}.hybrid.mapping.json"));
     let verify_rpu = tmp_dir.join(format!("{base}.hybrid.verify.rpu.bin"));
     // Like the scene lists, verify_scenes stays out of the CleanupGuard so a
     // sync-verification failure leaves it behind for inspection.
@@ -306,6 +308,7 @@ fn process_hybrid_impl(
         &hybrid_injected_hevc,
         &hybrid_editor_json,
         &hybrid_l5_json,
+        &mapping_json,
         &verify_rpu,
     ];
     if let Some(existing) = intermediates.iter().find(|p| p.exists()) {
@@ -370,6 +373,7 @@ fn process_hybrid_impl(
     if rt.dry_run {
         logger.ok("[DRY RUN] Preflight completed. Mutating steps were skipped.");
         logger.ok("[DRY RUN] Extracted RPU eligibility remains unchecked; it is required before editing in a real run.");
+        logger.ok("[DRY RUN] Mapping policy remains unchecked; a real hybrid must establish supported mapping across every donor RPU before editing.");
         logger.ok(&format!(
             "[DRY RUN] Would extract RPU from {}",
             dv_source.display()
@@ -408,6 +412,28 @@ fn process_hybrid_impl(
     )?;
 
     let dv_rpu_frames = donor::validate_rpu(&hybrid_rpu, dv_profile, rt, logger)?;
+    let mapping_policy = if allow_same_input {
+        // This path only moves metadata over the same source pictures. It
+        // does not authorize transferring a transform to a different target.
+        logger.measurement(
+            "mapping_policy",
+            serde_json::json!({
+                "policy": "preserve for same-input sync repair",
+                "mapping_removed": false,
+                "identity_required": false,
+            }),
+        );
+        mapping::MappingPolicy::PreserveForSyncRepair
+    } else {
+        mapping::inspect(
+            &hybrid_rpu,
+            &mapping_json,
+            dv_profile,
+            dv_rpu_frames,
+            rt,
+            logger,
+        )?
+    };
 
     logger.step("6 | Compute alignment strategy");
     let fps = fps_from_info(&hdr_info)
@@ -523,7 +549,7 @@ fn process_hybrid_impl(
     logger.step("9 | Apply editor (mode conversion + alignment)");
     hybrid_build_editor_json(
         &strategy,
-        dv_profile,
+        mapping_policy,
         &dv_info,
         &hdr_info,
         if matches!(active_area, ActiveAreaChoice::Measured(_)) {
@@ -538,13 +564,11 @@ fn process_hybrid_impl(
         // A sync repair must move the original metadata, preserving mapping and trims.
         let mut config = editor::build_editor_config(
             &strategy,
-            dv_profile,
+            mapping_policy,
             &dv_info,
             &hdr_info,
             &ActiveAreaChoice::Keep,
         );
-        config.mode = 0;
-        config.remove_mapping = false;
         config.level6 = None;
         fs::write(
             &hybrid_editor_json,
@@ -744,6 +768,21 @@ fn process_hybrid_impl(
         ));
     }
     logger.ok("Re-extracted output L5 matches every expected frame interval (metadata preservation, not picture-area validation)");
+    if !allow_same_input {
+        mapping::inspect(
+            &verify_rpu,
+            &mapping_json,
+            Some(8),
+            hdr_info.frame_count,
+            rt,
+            logger,
+        )
+        .map_err(|e| fail_output(format!("Output mapping verification failed: {e}")))?;
+        logger.check_result(
+            "output_mapping", "Output mapping", "pass",
+            "Every re-extracted output RPU has the supported identity mapping. This verifies mapping transport, not picture-grade compatibility.",
+        );
+    }
 
     logger.step("15 | Cleanup");
     let _ = fs::remove_file(&hybrid_rpu);
@@ -754,6 +793,7 @@ fn process_hybrid_impl(
     let _ = fs::remove_file(&dv_scenes_txt);
     let _ = fs::remove_file(&hdr_scenes_txt);
     let _ = fs::remove_file(&hybrid_l5_json);
+    let _ = fs::remove_file(&mapping_json);
     let _ = fs::remove_file(&verify_rpu);
     let _ = fs::remove_file(&verify_scenes_txt);
     if !rt.dry_run {

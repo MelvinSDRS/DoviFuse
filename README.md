@@ -126,6 +126,22 @@ unsupported variants fail regardless of `--force`, grade mode, or
 `--skip-grade-check`. Before editing, the extracted RPU must also have a
 consistent supported profile matching the media probe. Dry runs check media
 eligibility only; the extracted-RPU check remains pending until a real run.
+Hybrid transfers also require an explicit mapping policy across **every RPU**:
+
+- P8.1 donors must use the supported identity polynomial mapping in all three
+  channels. It is preserved with lossless metadata editing (mode 0).
+- P7 MEL donors require the same identity mapping; P7 FEL donors use the pinned
+  tool's established mode 2 compatibility conversion. FEL mapping and picture
+  residuals are discarded by that conversion, which is reported explicitly.
+  This does not preserve full FEL reconstruction.
+- Non-identity P8/MEL mapping, missing mapping, reused mapping references, and
+  unrecognized representations are rejected, including with `--force` or grade
+  overrides. There is no automatic mapping removal to make these donors pass.
+
+The re-extracted hybrid output must have identity mapping in every RPU as well.
+Same-file sync repair preserves existing mappings because it does not transfer
+them to another picture stream. Mapping checks do not establish grade equivalence;
+both hybrid sources remain retained. Dry runs leave mapping inspection pending.
 **Profile 5 hybrids are disabled on `main`, including with `--force`,
 `--skip-grade-check` or metadata-only grading.** The experimental P5 backend,
 analysis tools, fixtures and research are preserved on `codex/p5-workflow`.
@@ -147,7 +163,7 @@ scene cuts against an ffmpeg scan of the target to find and fix the exact
 frame offset) → **grade check** (samples brightness windows from both
 sources and aborts when the HDR grades differ, e.g. a 4000-nit DV master
 vs a 1000-nit Blu-ray trim; a pass is a brightness heuristic, not proof of equal grades) → **measured letterbox L5** (cropdetect sets
-the active-area metadata) → dovi_tool editor (mode 2) →
+the active-area metadata) → dovi_tool editor (mode 0 for P8.1, mode 2 for P7) →
 inject RPU → remux → validation → **post-inject sync verification**
 (re-extracts the RPU from the output and requires scene cuts to line up
 at offset 0 across the whole runtime).

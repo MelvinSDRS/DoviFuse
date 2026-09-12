@@ -9,6 +9,7 @@ use crate::mediainfo::HybridMediaInfo;
 
 use super::align::AlignmentStrategy;
 use super::letterbox::{ActiveAreaChoice, Bars};
+use super::mapping::MappingPolicy;
 
 /// dovi_tool editor config (`editor -j`). Field names and shapes mirror
 /// `EditConfig` in dovi_tool/src/dovi/editor.rs, which deserializes with
@@ -152,12 +153,12 @@ pub(crate) fn resolution_active_area(
 /// Assemble the full editor config. Pure — snapshot-tested below.
 pub(crate) fn build_editor_config(
     strategy: &AlignmentStrategy,
-    dv_profile: Option<u8>,
+    mapping_policy: MappingPolicy,
     dv_info: &HybridMediaInfo,
     hdr_info: &HybridMediaInfo,
     active_area: &ActiveAreaChoice,
 ) -> EditorConfig {
-    let mode = if dv_profile == Some(5) { 3 } else { 2 };
+    let mode = mapping_policy.editor_mode();
 
     let remove = if strategy.remove_ranges.is_empty() {
         None
@@ -198,7 +199,7 @@ pub(crate) fn build_editor_config(
     EditorConfig {
         mode,
         remove_cmv4: false,
-        remove_mapping: true,
+        remove_mapping: false,
         remove,
         duplicate,
         active_area,
@@ -208,13 +209,13 @@ pub(crate) fn build_editor_config(
 
 pub(crate) fn hybrid_build_editor_json(
     strategy: &AlignmentStrategy,
-    dv_profile: Option<u8>,
+    mapping_policy: MappingPolicy,
     dv_info: &HybridMediaInfo,
     hdr_info: &HybridMediaInfo,
     active_area: &ActiveAreaChoice,
     json_output_path: &Path,
 ) -> AppResult<()> {
-    let config = build_editor_config(strategy, dv_profile, dv_info, hdr_info, active_area);
+    let config = build_editor_config(strategy, mapping_policy, dv_info, hdr_info, active_area);
 
     let mut json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize editor config: {e}"))?;
@@ -278,7 +279,7 @@ mod tests {
     fn snapshot_mode2_minimal() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(7),
+            MappingPolicy::Profile7Compatibility,
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
@@ -288,29 +289,30 @@ mod tests {
             r#"{
   "mode": 2,
   "remove_cmv4": false,
-  "remove_mapping": true
+  "remove_mapping": false
 }"#
         );
     }
 
     #[test]
-    fn snapshot_mode3_for_profile5() {
+    fn sync_repair_preserves_existing_mapping() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(5),
+            MappingPolicy::PreserveForSyncRepair,
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
         );
-        assert_eq!(c.mode, 3);
-        assert!(render(&c).contains("\"mode\": 3"));
+        assert_eq!(c.mode, 0);
+        assert!(!c.remove_mapping);
+        assert!(render(&c).contains("\"mode\": 0"));
     }
 
     #[test]
     fn snapshot_positive_offset_remove_ranges() {
         let c = build_editor_config(
             &strategy(&["0-24", "1127-1151"], &[]),
-            Some(8),
+            MappingPolicy::Profile8Identity,
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
@@ -318,9 +320,9 @@ mod tests {
         assert_eq!(
             render(&c),
             r#"{
-  "mode": 2,
+  "mode": 0,
   "remove_cmv4": false,
-  "remove_mapping": true,
+  "remove_mapping": false,
   "remove": [
     "0-24",
     "1127-1151"
@@ -333,7 +335,7 @@ mod tests {
     fn snapshot_negative_offset_duplicates() {
         let c = build_editor_config(
             &strategy(&[], &[(0, 0, 25)]),
-            Some(8),
+            MappingPolicy::Profile8Identity,
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
@@ -341,9 +343,9 @@ mod tests {
         assert_eq!(
             render(&c),
             r#"{
-  "mode": 2,
+  "mode": 0,
   "remove_cmv4": false,
-  "remove_mapping": true,
+  "remove_mapping": false,
   "duplicate": [
     {
       "source": 0,
@@ -361,7 +363,7 @@ mod tests {
         // start trim plus end pad: remove + duplicate. Cover the latter.
         let c = build_editor_config(
             &strategy(&["0-9"], &[(1141, 1142, 5)]),
-            Some(7),
+            MappingPolicy::Profile7Compatibility,
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
@@ -371,7 +373,7 @@ mod tests {
             r#"{
   "mode": 2,
   "remove_cmv4": false,
-  "remove_mapping": true,
+  "remove_mapping": false,
   "remove": [
     "0-9"
   ],
@@ -390,7 +392,7 @@ mod tests {
     fn snapshot_measured_letterbox() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(8),
+            MappingPolicy::Profile8Identity,
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Measured(Bars {
@@ -403,9 +405,9 @@ mod tests {
         assert_eq!(
             render(&c),
             r#"{
-  "mode": 2,
+  "mode": 0,
   "remove_cmv4": false,
-  "remove_mapping": true,
+  "remove_mapping": false,
   "active_area": {
     "crop": true,
     "presets": [
@@ -429,7 +431,7 @@ mod tests {
     fn snapshot_resolution_target_bigger() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(7),
+            MappingPolicy::Profile7Compatibility,
             &info(3840, 1608),
             &info(3840, 2160),
             &ActiveAreaChoice::Resolution,
@@ -439,7 +441,7 @@ mod tests {
             r#"{
   "mode": 2,
   "remove_cmv4": false,
-  "remove_mapping": true,
+  "remove_mapping": false,
   "active_area": {
     "crop": false,
     "presets": [
@@ -478,7 +480,7 @@ mod tests {
     fn snapshot_level6_override_when_differs() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(8),
+            MappingPolicy::Profile8Identity,
             &info_with_l6(3840, 2160, 4000.0, 4000),
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &ActiveAreaChoice::Keep,
@@ -486,9 +488,9 @@ mod tests {
         assert_eq!(
             render(&c),
             r#"{
-  "mode": 2,
+  "mode": 0,
   "remove_cmv4": false,
-  "remove_mapping": true,
+  "remove_mapping": false,
   "level6": {
     "max_display_mastering_luminance": 1000,
     "min_display_mastering_luminance": 50,
@@ -503,7 +505,7 @@ mod tests {
     fn level6_skipped_when_equal() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(8),
+            MappingPolicy::Profile8Identity,
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &ActiveAreaChoice::Keep,
@@ -515,7 +517,7 @@ mod tests {
     fn level6_applied_when_dv_missing() {
         let c = build_editor_config(
             &strategy(&[], &[]),
-            Some(8),
+            MappingPolicy::Profile8Identity,
             &info(3840, 2160),
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &ActiveAreaChoice::Keep,

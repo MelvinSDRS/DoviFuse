@@ -31,6 +31,7 @@ python3 -m unittest discover -s scripts -p "test_release_gates.py"
 python3 scripts/verify_reference_catalog.py
 python3 scripts/audit_smoke.py
 python3 scripts/test_donor_eligibility.py
+python3 scripts/test_mapping_policy.py
 python3 scripts/test_p5_disabled.py
 python3 scripts/audit_standard_source.py
 python3 scripts/test_job_report.py

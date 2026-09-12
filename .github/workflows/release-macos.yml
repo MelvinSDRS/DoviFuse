@@ -71,6 +71,9 @@ jobs:
             /tmp/dv8-donor-eligibility-*/*.log
             /tmp/dv8-donor-eligibility-*/summary.json
             /tmp/dv8-donor-eligibility-*/*.report.json
+            /tmp/dv8-mapping-*/*.log
+            /tmp/dv8-mapping-*/summary.json
+            /tmp/dv8-mapping-*/*.report.json
 
   release:
     name: Build and verify Apple Silicon app
@@ -138,6 +141,9 @@ jobs:
             /tmp/dv8-donor-eligibility-*/*.log
             /tmp/dv8-donor-eligibility-*/summary.json
             /tmp/dv8-donor-eligibility-*/*.report.json
+            /tmp/dv8-mapping-*/*.log
+            /tmp/dv8-mapping-*/summary.json
+            /tmp/dv8-mapping-*/*.report.json
 
       - name: Require hybrid release acceptance evidence
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
