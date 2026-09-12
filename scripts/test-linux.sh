@@ -22,9 +22,15 @@ if [[ -z ${DV8_AUDIT_FIXTURES:-} ]]; then
   python3 scripts/audit_fixtures.py "$FIXTURE_PARENT/seeds"
   export DV8_AUDIT_FIXTURES="$FIXTURE_PARENT/seeds"
 fi
+export DV8_DONOR_ELIGIBILITY_FIXTURES="${DV8_DONOR_ELIGIBILITY_FIXTURES:-$DV8_AUDIT_FIXTURES/donor-eligibility}"
+if [[ ! -f "$DV8_DONOR_ELIGIBILITY_FIXTURES/manifest.json" ]]; then
+  python3 scripts/test_donor_eligibility.py --prepare "$DV8_DONOR_ELIGIBILITY_FIXTURES" \
+    --base-fixtures "$DV8_AUDIT_FIXTURES"
+fi
 python3 -m unittest discover -s scripts -p "test_release_gates.py"
 python3 scripts/verify_reference_catalog.py
 python3 scripts/audit_smoke.py
+python3 scripts/test_donor_eligibility.py
 python3 scripts/test_p5_disabled.py
 python3 scripts/audit_standard_source.py
 python3 scripts/test_job_report.py

@@ -1,5 +1,6 @@
 pub(crate) mod active_area;
 pub(crate) mod align;
+mod donor;
 pub(crate) mod editor;
 pub(crate) mod grade;
 pub(crate) mod l5;
@@ -368,6 +369,7 @@ fn process_hybrid_impl(
 
     if rt.dry_run {
         logger.ok("[DRY RUN] Preflight completed. Mutating steps were skipped.");
+        logger.ok("[DRY RUN] Extracted RPU eligibility remains unchecked; it is required before editing in a real run.");
         logger.ok(&format!(
             "[DRY RUN] Would extract RPU from {}",
             dv_source.display()
@@ -405,10 +407,7 @@ fn process_hybrid_impl(
         ],
     )?;
 
-    let dv_rpu_frames = hybrid_get_rpu_frame_count(&hybrid_rpu, rt, logger)?;
-    if dv_rpu_frames == 0 {
-        return Err("RPU extraction yielded 0 frames".to_string());
-    }
+    let dv_rpu_frames = donor::validate_rpu(&hybrid_rpu, dv_profile, rt, logger)?;
 
     logger.step("6 | Compute alignment strategy");
     let fps = fps_from_info(&hdr_info)

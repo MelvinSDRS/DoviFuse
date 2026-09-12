@@ -12,6 +12,7 @@ export PATH="$RESOURCES/tools:/usr/bin:/bin:/usr/sbin:/sbin"
 export DV8_AUDIT_RESOURCES="$RESOURCES"
 export DV8_AUDIT_BIN="$RESOURCES/tools/dv8_converter"
 export DV8_AUDIT_FIXTURES="$FIXTURES"
+export DV8_DONOR_ELIGIBILITY_FIXTURES="${DV8_DONOR_ELIGIBILITY_FIXTURES:-$FIXTURES/donor-eligibility}"
 export DV8_APP_REPLAY_MANIFEST=$(mktemp /tmp/dv8-app-replay.XXXXXX)
 unset PYTHONOPTIMIZE
 export TMPDIR=/tmp
@@ -39,6 +40,7 @@ for package in notices:
 print('Passed: bundled Rust license notices', len(notices))
 PY
 "$PYTHON" "$ROOT/scripts/audit_smoke.py"
+"$PYTHON" "$ROOT/scripts/test_donor_eligibility.py"
 "$PYTHON" "$ROOT/scripts/test_p5_disabled.py"
 "$PYTHON" "$ROOT/scripts/audit_standard_source.py"
 "$PYTHON" "$ROOT/scripts/test_job_report.py"

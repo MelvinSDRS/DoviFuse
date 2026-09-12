@@ -1,6 +1,6 @@
-use crate::cli::{GradeCheckMode, HybridOptions};
+use crate::cli::HybridOptions;
 use crate::logger::Logger;
-use crate::mediainfo::{fps_from_info, HybridMediaInfo};
+use crate::mediainfo::{fps_from_info, hybrid_donor_eligibility, HybridMediaInfo};
 
 use super::grade::{static_grade_verdict, Verdict};
 
@@ -163,6 +163,20 @@ pub(crate) fn hybrid_preflight_checks(
         }
     }
 
+    // This is an unconditional donor contract. It must remain independent of
+    // --force and all grade-check overrides because the downstream editor
+    // assumes a 10-bit BT.2020 PQ limited-range P7/P8.1-compatible base.
+    match hybrid_donor_eligibility(dv_info, dv_profile) {
+        Ok(donor) => logger.preflight_status(
+            "PASS",
+            &format!("9b. DV donor metadata is eligible ({donor:?})"),
+        ),
+        Err(reason) => {
+            logger.preflight_status("FAIL", &format!("9b. DV donor eligibility: {reason}"));
+            has_fail = true;
+        }
+    }
+
     let hdr_meta_lower = hdr_info.hdr_format.to_lowercase();
     let hdr_has_hdr = hdr_meta_lower.contains("hdr")
         || hdr_meta_lower.contains("2086")
@@ -204,14 +218,6 @@ pub(crate) fn hybrid_preflight_checks(
         );
         has_fail = true;
     }
-    if !opts.skip_grade_check
-        && opts.grade_check != GradeCheckMode::Metadata
-        && (dv_profile == Some(5) || !crate::mediainfo::has_hdr10_base(dv_info))
-    {
-        logger.preflight_status("FAIL", "Measured grade comparison requires a BT.2020 PQ source. Profile 5 hybrid is disabled on main.");
-        has_fail = true;
-    }
-
     let (verdict, msg) =
         static_grade_verdict(dv_info, hdr_info, opts.grade_check, opts.skip_grade_check);
     match verdict {
@@ -233,6 +239,7 @@ pub(crate) fn hybrid_preflight_checks(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::GradeCheckMode;
     use std::path::PathBuf;
 
     fn logger() -> Logger {
@@ -253,11 +260,15 @@ mod tests {
             frame_rate: Some(23.976),
             duration_ms: Some(4_170_000.0),
             hdr_format: "Dolby Vision".to_string(),
+            hdr_format_profile: "Profile 8.1".to_string(),
+            hdr_format_compatibility: "HDR10".to_string(),
             width: Some(3840),
             height: Some(2160),
             bit_depth: Some(10),
             colour_primaries: "BT.2020".to_string(),
             transfer_characteristics: "PQ".to_string(),
+            colour_range: "Limited".to_string(),
+            matrix_coefficients: "BT.2020 non-constant".to_string(),
             frame_rate_mode: "Constant".to_string(),
             max_cll: Some(1000),
             max_fall: Some(400),
@@ -283,8 +294,10 @@ mod tests {
             &opts,
             &logger()
         ));
+        let mut p7 = dv.clone();
+        p7.hdr_format_profile = "Profile 7".to_string();
         assert!(!hybrid_preflight_checks(
-            &dv,
+            &p7,
             &hdr,
             Some(7),
             &opts,
@@ -366,6 +379,112 @@ mod tests {
             &opts,
             &logger()
         ));
+    }
+
+    fn override_options() -> Vec<HybridOptions> {
+        [
+            GradeCheckMode::Metadata,
+            GradeCheckMode::Sampled,
+            GradeCheckMode::Full,
+        ]
+        .into_iter()
+        .flat_map(|grade_check| {
+            [false, true].into_iter().flat_map(move |skip_grade_check| {
+                [false, true].into_iter().map(move |force| HybridOptions {
+                    grade_check,
+                    skip_grade_check,
+                    force,
+                    ..Default::default()
+                })
+            })
+        })
+        .collect()
+    }
+
+    #[test]
+    fn donor_gate_passes_p7_and_p81_for_every_grade_override() {
+        let (dv, hdr) = good_pair();
+        let mut p7 = dv.clone();
+        p7.hdr_format_profile = "Profile 7".to_string();
+
+        for opts in override_options() {
+            assert!(
+                !hybrid_preflight_checks(&dv, &hdr, Some(8), &opts, &logger()),
+                "eligible P8.1 donor rejected with options: grade={:?}, skip={}, force={}",
+                opts.grade_check,
+                opts.skip_grade_check,
+                opts.force
+            );
+            assert!(
+                !hybrid_preflight_checks(&p7, &hdr, Some(7), &opts, &logger()),
+                "eligible P7 donor rejected with options: grade={:?}, skip={}, force={}",
+                opts.grade_check,
+                opts.skip_grade_check,
+                opts.force
+            );
+        }
+    }
+
+    #[test]
+    fn donor_gate_rejects_missing_or_contradictory_fields_for_every_override() {
+        let (dv, hdr) = good_pair();
+        let mut bad_donors = Vec::new();
+
+        let mut missing_range = dv.clone();
+        missing_range.colour_range.clear();
+        bad_donors.push(missing_range);
+
+        let mut missing_matrix = dv.clone();
+        missing_matrix.matrix_coefficients.clear();
+        bad_donors.push(missing_matrix);
+
+        let mut missing_compatibility = dv.clone();
+        missing_compatibility.hdr_format_compatibility.clear();
+        bad_donors.push(missing_compatibility);
+
+        for value in [
+            ("Full", "BT.2020 non-constant", "BT.2020", "PQ", "HDR10"),
+            ("Limited", "BT.2020 constant", "BT.2020", "PQ", "HDR10"),
+            (
+                "Limited",
+                "BT.2020 non-constant",
+                "BT.2020 / BT.709",
+                "PQ",
+                "HDR10",
+            ),
+            ("Limited", "BT.2020 non-constant", "BT.2020", "HLG", "HDR10"),
+            (
+                "Limited",
+                "BT.2020 non-constant",
+                "BT.2020",
+                "PQ",
+                "HDR10 / HLG",
+            ),
+        ] {
+            let mut bad = dv.clone();
+            bad.colour_range = value.0.to_string();
+            bad.matrix_coefficients = value.1.to_string();
+            bad.colour_primaries = value.2.to_string();
+            bad.transfer_characteristics = value.3.to_string();
+            bad.hdr_format_compatibility = value.4.to_string();
+            bad_donors.push(bad);
+        }
+
+        let mut p84 = dv.clone();
+        p84.hdr_format_profile = "Profile 8.4".to_string();
+        bad_donors.push(p84);
+
+        for bad in bad_donors {
+            for opts in override_options() {
+                assert!(
+                    hybrid_preflight_checks(&bad, &hdr, Some(8), &opts, &logger()),
+                    "invalid donor passed with options: grade={:?}, skip={}, force={}",
+                    opts.grade_check,
+                    opts.skip_grade_check,
+                    opts.force
+                );
+            }
+        }
     }
 
     #[test]

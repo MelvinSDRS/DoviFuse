@@ -117,8 +117,15 @@ overwritten.
 
 ### Hybrid mode (P8 hybrid maker)
 
-Inject Dolby Vision metadata from a Profile 7 or 8 source into an HDR10-only
+Inject Dolby Vision metadata from a Profile 7 or 8.1 source into an HDR10-only
 target (typically a Blu-ray remux), producing a Profile 8 hybrid.
+Donors require explicit HDR10 compatibility and a 10-bit BT.2020 PQ base
+layer with limited range and BT.2020 non-constant matrix coefficients.
+Missing or contradictory interpretation fields, HLG/Profile 8.4, and other
+unsupported variants fail regardless of `--force`, grade mode, or
+`--skip-grade-check`. Before editing, the extracted RPU must also have a
+consistent supported profile matching the media probe. Dry runs check media
+eligibility only; the extracted-RPU check remains pending until a real run.
 **Profile 5 hybrids are disabled on `main`, including with `--force`,
 `--skip-grade-check` or metadata-only grading.** The experimental P5 backend,
 analysis tools, fixtures and research are preserved on `codex/p5-workflow`.
@@ -158,7 +165,7 @@ Hybrid-only flags:
   `sampled`; `full` measures the entire runtime).
 - `--grade-windows <n>`: sample windows for the sampled check (default 6).
 - `--skip-grade-check`: bypass the grade gate (use only when you are
-  certain the grades match).
+  certain the grades match). Donor eligibility checks still apply.
 - `--letterbox <measured|resolution|off>`: L5 active-area handling
   (default `measured`). Missing measurements, variable measured bars or multiple
   donor L5 presets now stop measured mode; there is no resolution fallback.
