@@ -137,7 +137,7 @@ run([DOVI, 'editor', '-i', WORK/'shifted.bin', '-j', trim, '-o', WORK/'shifted-p
 run([DOVI, 'inject-rpu', '-i', WORK/'hdr.hevc', '-r', WORK/'shifted-late.bin', '-o', WORK/'shifted-late.hevc'], 'inject-shifted-late')
 run(['mkvmerge', '-o', WORK/'shifted-late.mkv', WORK/'shifted-late.hevc'], 'mux-shifted-late')
 before_repair = sha(WORK/'shifted-late.mkv')
-run([BIN, '--repair-sync', '5', '--hwaccel', 'off', WORK/'shifted-late.mkv'], 'repair-nonidentity')
+run([BIN, '--repair-sync', '5', '--allow-padding', '--hwaccel', 'off', WORK/'shifted-late.mkv'], 'repair-nonidentity')
 run([DOVI, 'extract-rpu', WORK/'shifted-late.DV8.Fixed.mkv', '-o', WORK/'repaired.bin'], 'extract-repaired')
 original_maps = mappings(WORK/'shifted-late.bin', 'repair-source-mappings')
 repaired_maps = mappings(WORK/'repaired.bin', 'repair-output-mappings')

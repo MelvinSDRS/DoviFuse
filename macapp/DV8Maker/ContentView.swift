@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var presentedSheet: PresentedSheet?
+    @State private var showPaddingReview = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -95,12 +96,18 @@ struct ContentView: View {
             } else if model.outputURL != nil || model.errorMessage != nil {
                 if model.canFix {
                     Button {
-                        model.fix()
+                        showPaddingReview = true
                     } label: {
                         Label("Fix", systemImage: "wrench.and.screwdriver")
                     }
                     .buttonStyle(PrimaryActionButtonStyle())
-                    .accessibilityHint("Creates and verifies a repaired copy; the original is kept")
+                    .accessibilityHint("Review edge padding before creating a repaired copy")
+                    .alert("Repair with repeated edge metadata?", isPresented: $showPaddingReview) {
+                        Button("Repair with Padding") { model.fix() }
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        Text(model.repairPaddingDetail)
+                    }
 
                     Button("New Check") {
                         model.resetStatus()

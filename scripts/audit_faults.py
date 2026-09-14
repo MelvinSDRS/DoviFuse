@@ -95,7 +95,7 @@ def main():
         elif mode == 'hybrid':
             args += ['--hybrid', str(work/'media/dv.mkv'), str(work/'media/hdr.mkv')]
         elif mode == 'repair':
-            args += ['--repair-sync', '5', str(work/'media/shifted.mkv')]
+            args += ['--repair-sync', '5', '--allow-padding', str(work/'media/shifted.mkv')]
         else:
             args += ['--check', str(work/'media/dv.mkv')]
         process = None

@@ -73,6 +73,8 @@ jobs:
             /tmp/dv8-donor-eligibility-*/*.report.json
             /tmp/dv8-mapping-*/*.log
             /tmp/dv8-mapping-*/summary.json
+            /tmp/dv8-temporal-*/*.log
+            /tmp/dv8-temporal-*/*.json
             /tmp/dv8-mapping-*/*.report.json
 
   release:
@@ -143,6 +145,8 @@ jobs:
             /tmp/dv8-donor-eligibility-*/*.report.json
             /tmp/dv8-mapping-*/*.log
             /tmp/dv8-mapping-*/summary.json
+            /tmp/dv8-temporal-*/*.log
+            /tmp/dv8-temporal-*/*.json
             /tmp/dv8-mapping-*/*.report.json
 
       - name: Require hybrid release acceptance evidence

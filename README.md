@@ -81,6 +81,7 @@ Flags:
 - `--check`: perform a read-only validation of an existing DV8 MKV.
 - `--repair-sync <frames>`: create a corrected copy for a checker-confirmed
   RPU/video offset. The offset is measured again before any output is written.
+  Edge duplication requires `--allow-padding`; the app presents a padding review.
 - `-h`, `--help`: show usage.
 
 ### Checker mode
@@ -171,9 +172,16 @@ at offset 0 across the whole runtime).
 Hybrid-only flags:
 
 - `--sync <scenes|framecount>`: alignment mode (default `scenes`).
-  Single-shot content with no detectable cuts needs `framecount`.
-- `--force`: fall back to the framecount heuristic when scene correlation
-  fails instead of aborting (post-inject correlation may remain inconclusive).
+  `framecount` assumes offset zero only when counts match; it cannot locate edits.
+- `--offset <signed frames>`: explicitly set `dv_frame = hdr_frame + offset`
+  after inspecting the sources. Fresh scene evidence still rejects contradictory
+  offsets or local edits.
+- `--allow-padding`: explicitly accept repeating first/last RPU metadata where
+  donor pictures are missing. The report records every duplicate operation;
+  those pictures remain unverified. Neither `--force` nor an offset approves
+  padding implicitly. Same-file checker repairs also require this flag; the app asks before padding.
+- `--force`: allow an unverified zero-offset fallback for equal counts when
+  scene correlation is inconclusive. Local contradictions still fail.
   Unknown DV profiles still fail; no RPU conversion mode is guessed.
 - `--max-offset <frames>`: correlation search window (default 5 minutes).
 - `--scene-threshold <f>`: ffmpeg scdet threshold (default 8.0).
@@ -189,6 +197,14 @@ Hybrid-only flags:
 - `--delete-sources`: request input deletion; currently withheld because
   full-timeline active-picture/L5 validation remains inconclusive. Both inputs
   are retained even when this flag is supplied.
+
+Scene correlation estimates a global offset. Job reports (`--report <path>`,
+automatic in the app) retain matched anchors,
+unverified intervals over the full duration, and local offset contradictions.
+A short alternate edit cannot be approved by the global match ratio alone.
+Intervals between anchors still require picture inspection; neither matching
+counts nor matching scene flags establishes whole-film picture equivalence.
+Post-inject checks use scene cuts decoded from the finished output.
 
 On validation or sync-verification failure the output is renamed to
 `.FAILED.mkv` and kept for inspection, along with the scene-cut lists

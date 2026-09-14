@@ -76,7 +76,7 @@ shift_hash=digest(WORK/'shifted.mkv')
 events=convert(['--check',WORK/'shifted.mkv'],'checker-offset',1)
 assert any(e.get('fix_value')==5 for e in events)
 convert(['--repair-sync','4',WORK/'shifted.mkv'],'repair-stale-offset',1)
-convert(['--repair-sync','5',WORK/'shifted.mkv'],'repair-offset')
+convert(['--repair-sync','5','--allow-padding',WORK/'shifted.mkv'],'repair-offset')
 assert digest(WORK/'shifted.mkv')==shift_hash
 convert(['--check',WORK/'shifted.DV8.Fixed.mkv'],'checker-repaired')
 # Assemble P7 signalling from upstream BL/EL and FEL RPU fixtures.

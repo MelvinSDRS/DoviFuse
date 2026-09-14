@@ -8,7 +8,7 @@ use crate::mediainfo::{hybrid_detect_dv_profile, hybrid_get_media_info, parse_in
 use crate::runtime::Runtime;
 
 use super::scenes::{
-    correlate_scene_cuts, export_dv_scene_cuts, parse_scene_list, CorrelationReport,
+    assess_temporal_alignment, correlate_scene_cuts, export_dv_scene_cuts, CorrelationReport,
 };
 
 pub(crate) fn hybrid_get_rpu_frame_count(
@@ -127,7 +127,7 @@ pub(crate) fn hybrid_validate_output(
 }
 
 pub(crate) enum SyncVerdict {
-    /// Offset 0 confirmed across the whole runtime.
+    /// Offset 0 supported at measured scene anchors only.
     Verified(String),
     /// Correlation could not establish a confident offset (e.g. periodic
     /// content, too few cuts). Not proof of a problem - warn only.
@@ -137,13 +137,11 @@ pub(crate) enum SyncVerdict {
 }
 
 /// Pure verdict from correlating the OUTPUT's RPU cuts against the HDR
-/// target's detected cuts. Correlation acceptance already requires every
-/// measurable tercile (start/middle/end) to agree with the global offset,
-/// so a verified offset 0 covers the whole runtime.
+/// decoded video cuts. This does not establish picture alignment between anchors.
 pub(crate) fn judge_output_sync(report: &CorrelationReport) -> SyncVerdict {
     match &report.accepted {
         Some(sync) if sync.offset == 0 => SyncVerdict::Verified(format!(
-            "Post-inject sync verified: offset 0 in all measurable terciles ({} matches, {:.0}% of RPU cuts, dominance {:.1})",
+            "Post-inject scene anchors support offset 0; picture alignment between anchors remains unverified ({} matches, {:.0}% of RPU cuts, dominance {:.1})",
             sync.matches,
             sync.match_ratio * 100.0,
             sync.dominance
@@ -168,7 +166,7 @@ pub(crate) fn judge_output_sync(report: &CorrelationReport) -> SyncVerdict {
 /// Post-inject verification (the tutorial's start/middle/end spot-check,
 /// automated): re-extract the RPU from the finished output, require its
 /// frame count to equal the HDR target's, then correlate its scene cuts
-/// against the HDR cut list persisted during alignment.
+/// against scene cuts decoded from the finished output.
 ///
 /// `max_offset` is the same search window used for alignment - wide enough
 /// that a genuinely misaligned RPU is FOUND at its nonzero offset (hard
@@ -178,7 +176,7 @@ pub(crate) fn judge_output_sync(report: &CorrelationReport) -> SyncVerdict {
 pub(crate) fn hybrid_verify_output_sync(
     out_file: &Path,
     hdr_frames: u64,
-    hdr_scenes_txt: &Path,
+    hdr_cuts: &[u64],
     verify_rpu: &Path,
     verify_scenes_txt: &Path,
     max_offset: i64,
@@ -213,19 +211,23 @@ pub(crate) fn hybrid_verify_output_sync(
         logger.warn("HDR target frame count unknown - RPU frame count check skipped");
     }
 
-    let hdr_cuts = match fs::read_to_string(hdr_scenes_txt) {
-        Ok(content) => parse_scene_list(&content),
-        Err(_) => Vec::new(),
-    };
-    if hdr_cuts.is_empty() {
-        logger.warn(
-            "No HDR scene-cut list available (--sync framecount?) - scene verification skipped",
-        );
-        return Ok(());
-    }
-
     let out_cuts = export_dv_scene_cuts(verify_rpu, verify_scenes_txt, rt, logger)?;
-    let report = correlate_scene_cuts(&out_cuts, &hdr_cuts, max_offset, 1);
+    let report = correlate_scene_cuts(&out_cuts, hdr_cuts, max_offset, 1);
+    let evidence = assess_temporal_alignment(
+        &out_cuts, hdr_cuts, rpu_frames, hdr_frames, 0, max_offset, 1,
+    );
+    logger.measurement(
+        "output_temporal_alignment",
+        serde_json::to_value(&evidence).unwrap(),
+    );
+    if let Some(limit) = &evidence.analysis_limit {
+        return Err(format!(
+            "Post-inject temporal inspection incomplete: {limit}"
+        ));
+    }
+    if !evidence.contradictions.is_empty() {
+        return Err(format!("Post-inject sync FAILED: local offsets contradict output video. Inspect decoded pictures in these intervals: {:?}", evidence.contradictions));
+    }
 
     match judge_output_sync(&report) {
         SyncVerdict::Verified(msg) => {

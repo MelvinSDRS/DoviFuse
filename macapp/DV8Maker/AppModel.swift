@@ -264,6 +264,11 @@ final class AppModel: ObservableObject {
         return args
     }
 
+    var repairPaddingDetail: String {
+        let frames = fixableResult?.fixValue?.magnitude ?? 0
+        return "This repair repeats edge metadata for \(frames) frames. Those pictures remain unverified. The original file is kept."
+    }
+
     func fix() {
         guard canFix, let checkerSource, let fixableResult,
               fixableResult.fixAction == "sync-offset", let offset = fixableResult.fixValue else {
@@ -276,7 +281,7 @@ final class AppModel: ObservableObject {
             "--tmp-dir", scratchURL.path,
             "--hwaccel", hardware.rawValue,
             "--progress", "jsonl",
-            "--repair-sync", String(offset),
+            "--repair-sync", String(offset), "--allow-padding",
             checkerSource.path
         ]
         launch(args: args, operation: .repair)

@@ -5,7 +5,9 @@ use std::path::Path;
 use crate::exec::{run_status, AppResult, CleanupGuard};
 use crate::ffmpeg::scan_video;
 use crate::fsutil::create_job_dir;
-use crate::hybrid::scenes::{correlate_scene_cuts, export_dv_scene_cuts, CorrelationReport};
+use crate::hybrid::scenes::{
+    assess_temporal_alignment, correlate_scene_cuts, export_dv_scene_cuts, CorrelationReport,
+};
 use crate::hybrid::validate::hybrid_get_rpu_frame_count;
 use crate::logger::Logger;
 use crate::mediainfo::{
@@ -437,12 +439,45 @@ pub(crate) fn check_file_with_phase_offset(
                 let max_offset = (fps * 300.0).round() as i64;
                 let sync_report = correlate_scene_cuts(&rpu_cuts, video_cuts, max_offset, 1);
                 logger.measurement("metadata_sync", serde_json::json!({"accepted_offset_frames":sync_report.accepted.as_ref().map(|s|s.offset),"source":"RPU flags versus decoded scene cuts; not donor picture alignment"}));
-                let (status, detail) = checker_sync_result(&sync_report);
+                let evidence = assess_temporal_alignment(
+                    &rpu_cuts,
+                    video_cuts,
+                    rpu_frames.unwrap(),
+                    info.frame_count,
+                    sync_report.accepted.map(|sync| sync.offset).unwrap_or(0),
+                    max_offset,
+                    1,
+                );
+                logger.measurement(
+                    "temporal_alignment",
+                    serde_json::to_value(&evidence).unwrap(),
+                );
+                let local_conflict = !evidence.contradictions.is_empty();
+                let (status, detail) = if local_conflict {
+                    (CheckStatus::Fail, format!("Local scene offsets disagree: a single offset cannot repair this timeline. Inspect decoded pictures in these intervals: {:?}", evidence.contradictions))
+                } else {
+                    let (status, detail) = checker_sync_result(&sync_report);
+                    if let Some(limit) = &evidence.analysis_limit {
+                        let status = if matches!(status, CheckStatus::Fail) {
+                            status
+                        } else {
+                            CheckStatus::Warn
+                        };
+                        (
+                            status,
+                            format!("{detail}. Temporal inspection incomplete: {limit}"),
+                        )
+                    } else {
+                        (status, detail)
+                    }
+                };
                 let fixable_offset = sync_report
                     .accepted
                     .map(|sync| sync.offset)
                     .filter(|offset| *offset != 0);
-                if detected_profile == Some(8)
+                if evidence.analysis_limit.is_none()
+                    && !local_conflict
+                    && detected_profile == Some(8)
                     && hdr10_repair_safe
                     && rpu_frames == Some(info.frame_count)
                     && info.frame_count > 0

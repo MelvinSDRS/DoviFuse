@@ -60,7 +60,14 @@ fn run(cli: &CliArgs, rt: runtime::Runtime, logger: logger::Logger) -> AppResult
             .map(absolutize)
             .ok_or_else(|| "No repair input provided".to_string())?;
         let custom_output = cli.custom_output.as_ref().map(absolutize);
-        let output = hybrid::repair_sync(&input, offset, custom_output.as_deref(), &rt, &logger)?;
+        let output = hybrid::repair_sync(
+            &input,
+            offset,
+            cli.hybrid.allow_padding,
+            custom_output.as_deref(),
+            &rt,
+            &logger,
+        )?;
         if rt.dry_run {
             logger.completed(&output);
         } else {

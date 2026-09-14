@@ -24,12 +24,14 @@ use crate::mediainfo::{
 };
 use crate::runtime::Runtime;
 
-use align::{alignment_from_offset, compute_alignment_framecount, AlignmentStrategy};
+use align::{
+    alignment_from_offset, compute_alignment_framecount, require_padding_review, AlignmentStrategy,
+};
 use editor::hybrid_build_editor_json;
 use grade::run_grade_check;
 use letterbox::{decide_active_area, dv_rpu_l5_presets, measure_letterbox, ActiveAreaChoice};
 use preflight::hybrid_preflight_checks;
-use scenes::{correlate_scene_cuts, export_dv_scene_cuts};
+use scenes::{assess_temporal_alignment, correlate_scene_cuts, export_dv_scene_cuts};
 use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output, hybrid_verify_output_sync};
 
 /// Correlation search window in frames: --max-offset, or 5 minutes' worth.
@@ -41,8 +43,8 @@ fn correlation_max_offset(opts: &HybridOptions, fps: f64) -> i64 {
 /// Compute the RPU alignment strategy per the configured sync mode.
 ///
 /// Scenes mode: correlate the RPU's scene-cut list against an ffmpeg scdet
-/// scan of the HDR target. Rejection aborts unless --force, which falls back
-/// to the frame-count heuristic. Both cut lists are persisted next to the
+/// scan of the HDR target. Explicit offsets never override local contradictions.
+/// Frame counts alone cannot locate an edit. Both cut lists are persisted next to the
 /// target while processing (kept on failure for inspection).
 #[allow(clippy::too_many_arguments)]
 fn compute_alignment(
@@ -57,8 +59,8 @@ fn compute_alignment(
     rt: &Runtime,
     logger: &Logger,
 ) -> AppResult<AlignmentStrategy> {
-    if opts.sync == SyncMode::Framecount {
-        return compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps);
+    if opts.sync == SyncMode::Framecount && opts.explicit_offset.is_none() {
+        compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps)?;
     }
 
     let dv_cuts = export_dv_scene_cuts(hybrid_rpu, dv_scenes_txt, rt, logger)?;
@@ -107,6 +109,54 @@ fn compute_alignment(
         }
     }
 
+    let candidate_offset = if opts.sync == SyncMode::Framecount {
+        opts.explicit_offset.unwrap_or(0)
+    } else {
+        opts.explicit_offset
+            .or_else(|| report.accepted.map(|sync| sync.offset))
+            .unwrap_or(0)
+    };
+    let evidence = assess_temporal_alignment(
+        &dv_cuts,
+        &hdr_cuts,
+        dv_rpu_frames,
+        hdr_frames,
+        candidate_offset,
+        max_offset,
+        1,
+    );
+    logger.measurement(
+        "temporal_alignment",
+        serde_json::to_value(&evidence).unwrap(),
+    );
+    logger.log(&format!("Temporal evidence: {} matched anchors; {} unverified intervals over the full timelines (use --report to retain frame ranges)", evidence.matched_anchors.len(), evidence.unverified_intervals.len()));
+    if let Some(limit) = &evidence.analysis_limit {
+        return Err(format!("Temporal inspection incomplete: {limit}. Inspect the source timelines before proceeding."));
+    }
+    if !evidence.contradictions.is_empty() {
+        return Err(format!("Temporal alignment rejected: local scene offsets contradict the proposed offset {candidate_offset:+}. Conflicting intervals: {:?}. Inspect decoded pictures in these ranges; --force and --offset cannot approve different edits.", evidence.contradictions));
+    }
+    if opts.sync == SyncMode::Framecount && opts.explicit_offset.is_none() {
+        if let Some(sync) = report.accepted {
+            if sync.offset != 0 {
+                return Err(format!("Framecount offset 0 contradicts measured scene offset {:+}; inspect the sources and supply --offset", sync.offset));
+            }
+        }
+        return compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps);
+    }
+    if let Some(offset) = opts.explicit_offset {
+        if let Some(sync) = report.accepted {
+            if sync.offset.abs_diff(offset) > 1 {
+                return Err(format!(
+                    "Explicit offset {offset:+} contradicts measured scene offset {:+}",
+                    sync.offset
+                ));
+            }
+        }
+        logger.warn("Using an explicit offset; picture alignment and intervals between anchors remain unverified");
+        return alignment_from_offset(offset, dv_rpu_frames, hdr_frames);
+    }
+
     match report.accepted {
         Some(sync) => {
             logger.ok(&format!(
@@ -132,11 +182,11 @@ fn compute_alignment(
             ));
             if opts.force {
                 logger
-                    .warn("--force: falling back to the frame-count heuristic (sync NOT verified)");
+                    .warn("--force: assuming offset 0 only for equal frame counts (picture alignment NOT verified)");
                 compute_alignment_framecount(dv_rpu_frames, hdr_frames, fps)
             } else {
                 Err(format!(
-                    "Scene-cut sync failed: {reason}. Re-run with --force to use the frame-count heuristic, or --sync framecount."
+                    "Scene-cut sync failed: {reason}. Inspect the scene lists and supply --offset <frames>, or use --sync framecount only for equal frame counts."
                 ))
             }
         }
@@ -166,6 +216,7 @@ pub(crate) fn process_hybrid(
 pub(crate) fn repair_sync(
     file: &Path,
     offset: i64,
+    allow_padding: bool,
     custom_output: Option<&Path>,
     rt: &Runtime,
     logger: &Logger,
@@ -185,6 +236,7 @@ pub(crate) fn repair_sync(
         skip_grade_check: true,
         letterbox: LetterboxMode::Off,
         known_offset: Some(offset),
+        allow_padding,
         ..HybridOptions::default()
     };
     process_hybrid_impl(file, file, Some(&output), &opts, rt, logger, true, false)?;
@@ -453,12 +505,13 @@ fn process_hybrid_impl(
         logger,
     )?;
 
-    logger.measurement("alignment", serde_json::json!({"offset_frames":strategy.start_offset,"method":format!("{:?}",opts.sync),"description":strategy.description,"high_risk":strategy.high_risk,"picture_alignment_verified":false}));
+    logger.measurement("alignment", serde_json::json!({"action":strategy.action,"offset_frames":strategy.start_offset,"method":format!("{:?}",opts.sync),"description":strategy.description,"high_risk":strategy.high_risk,"padding_reviewed":opts.allow_padding,"remove_ranges":strategy.remove_ranges,"duplicates":strategy.duplicates.iter().map(|d|serde_json::json!({"source":d.source,"offset":d.offset,"length":d.length})).collect::<Vec<_>>(),"picture_alignment_verified":false}));
+    require_padding_review(&strategy, opts.allow_padding)?;
     logger.check_result("picture_alignment", "Picture alignment", "inconclusive",
         "The offset is based on metadata scene flags or frame counts. Full-film decoded-picture alignment has not been validated.");
     logger.ok(&format!("Alignment strategy: {}", strategy.description));
     if strategy.high_risk {
-        logger.warn("Alignment marked HIGH RISK due to large frame difference");
+        logger.warn("Alignment repeats edge metadata; the padded pictures remain unverified");
     }
 
     logger.step("7 | Grade check (brightness comparison)");
@@ -743,7 +796,7 @@ fn process_hybrid_impl(
     if let Err(e) = hybrid_verify_output_sync(
         &output_path,
         hdr_info.frame_count,
-        &hdr_scenes_txt,
+        &scan.cuts,
         &verify_rpu,
         &verify_scenes_txt,
         correlation_max_offset(opts, fps),

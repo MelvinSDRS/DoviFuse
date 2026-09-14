@@ -15,6 +15,7 @@ use std::path::Path;
 use crate::exec::{run_status, AppResult};
 use crate::logger::Logger;
 use crate::runtime::Runtime;
+use serde::Serialize;
 
 /// Minimum scene cuts a tercile needs before its offset vote is trusted.
 const TERCILE_MIN_CUTS: usize = 3;
@@ -268,6 +269,447 @@ pub(crate) fn correlate_scene_cuts(
     report
 }
 
+const LOCAL_WINDOW_CUTS: usize = 20;
+const LOCAL_WINDOW_STEP: usize = 10;
+const LOCAL_MIN_CUTS: usize = 10;
+const LOCAL_TOP_CANDIDATES: usize = 64;
+const LOCAL_WORK_BUDGET: usize = 10_000_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) enum TemporalEvidenceStatus {
+    Consistent,
+    Contradiction,
+    InsufficientEvidence,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct MatchedAnchor {
+    pub(crate) dv_frame: u64,
+    pub(crate) hdr_frame: u64,
+    pub(crate) residual: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) enum EvidenceStream {
+    Dv,
+    Hdr,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) enum CoverageGapKind {
+    NoMatchedAnchors,
+    Leading,
+    BetweenAnchors,
+    Trailing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct UnverifiedInterval {
+    pub(crate) stream: EvidenceStream,
+    pub(crate) start_frame: u64,
+    pub(crate) end_frame: u64,
+    pub(crate) kind: CoverageGapKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct LocalOffsetContradiction {
+    pub(crate) dv_start: u64,
+    pub(crate) dv_end: u64,
+    pub(crate) expected_offset: i64,
+    pub(crate) alternate_offset: i64,
+    pub(crate) expected_matches: usize,
+    pub(crate) alternate_matches: usize,
+    pub(crate) window_cuts: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct TemporalEvidence {
+    pub(crate) status: TemporalEvidenceStatus,
+    pub(crate) dv_frames: u64,
+    pub(crate) hdr_frames: u64,
+    pub(crate) estimated_offset: i64,
+    pub(crate) max_offset: i64,
+    pub(crate) tolerance: i64,
+    pub(crate) matched_anchors: Vec<MatchedAnchor>,
+    pub(crate) unverified_intervals: Vec<UnverifiedInterval>,
+    pub(crate) contradictions: Vec<LocalOffsetContradiction>,
+    /// Set when local alternate-offset inspection exhausted its bounded work
+    /// budget; a limited assessment cannot be reported as consistent.
+    pub(crate) analysis_limit: Option<String>,
+}
+
+/// Assess temporal evidence across the complete timelines.
+///
+/// Scene anchors establish local correspondence only.  The returned gaps
+/// cover the full DV and HDR frame ranges, including leading, between-anchor,
+/// and trailing regions.  A strong alternate offset in a local window is a
+/// contradiction; sparse or unmatched anchors alone remain insufficient
+/// evidence and are never treated as a contradiction.
+pub(crate) fn assess_temporal_alignment(
+    dv_cuts: &[u64],
+    hdr_cuts: &[u64],
+    dv_frames: u64,
+    hdr_frames: u64,
+    estimated_offset: i64,
+    max_offset: i64,
+    tolerance: i64,
+) -> TemporalEvidence {
+    let tolerance = tolerance.max(0);
+    let dv = normalize_cuts(dv_cuts, dv_frames);
+    let hdr = normalize_cuts(hdr_cuts, hdr_frames);
+    let anchors = matched_anchors(&dv, &hdr, estimated_offset, tolerance);
+    let (contradictions, analysis_limit) =
+        local_offset_contradictions(&dv, &hdr, estimated_offset, max_offset.max(0), tolerance);
+    let mut gaps = timeline_gaps(
+        EvidenceStream::Dv,
+        dv_frames,
+        anchors.iter().map(|a| a.dv_frame),
+    );
+    gaps.extend(timeline_gaps(
+        EvidenceStream::Hdr,
+        hdr_frames,
+        anchors.iter().map(|a| a.hdr_frame),
+    ));
+
+    let minimum_anchors = 10usize.max((dv.len() as f64 * 0.05).ceil() as usize);
+    let status = if !contradictions.is_empty() {
+        TemporalEvidenceStatus::Contradiction
+    } else if analysis_limit.is_some()
+        || dv_frames == 0
+        || hdr_frames == 0
+        || anchors.len() < minimum_anchors
+    {
+        TemporalEvidenceStatus::InsufficientEvidence
+    } else {
+        TemporalEvidenceStatus::Consistent
+    };
+
+    TemporalEvidence {
+        status,
+        dv_frames,
+        hdr_frames,
+        estimated_offset,
+        max_offset,
+        tolerance,
+        matched_anchors: anchors,
+        unverified_intervals: gaps,
+        contradictions,
+        analysis_limit,
+    }
+}
+
+fn normalize_cuts(cuts: &[u64], frames: u64) -> Vec<u64> {
+    let mut normalized: Vec<u64> = cuts
+        .iter()
+        .copied()
+        .filter(|&cut| frames == 0 || cut < frames)
+        .filter(|&cut| cut != 0)
+        .collect();
+    normalized.sort_unstable();
+    normalized.dedup();
+    normalized
+}
+
+fn matched_anchors(
+    dv_cuts: &[u64],
+    hdr_cuts: &[u64],
+    offset: i64,
+    tolerance: i64,
+) -> Vec<MatchedAnchor> {
+    let mut anchors = Vec::new();
+    let mut hdr_index = 0usize;
+    for &dv_frame in dv_cuts {
+        let target = dv_frame as i128 - offset as i128;
+        while hdr_index < hdr_cuts.len()
+            && (hdr_cuts[hdr_index] as i128) < target - tolerance as i128
+        {
+            hdr_index += 1;
+        }
+        if hdr_index >= hdr_cuts.len() {
+            break;
+        }
+        let hdr_frame = hdr_cuts[hdr_index];
+        let residual = dv_frame as i128 - hdr_frame as i128 - offset as i128;
+        if residual.abs() <= tolerance as i128 {
+            anchors.push(MatchedAnchor {
+                dv_frame,
+                hdr_frame,
+                residual: residual as i64,
+            });
+            hdr_index += 1;
+        }
+    }
+    anchors
+}
+
+fn local_offset_contradictions(
+    dv_cuts: &[u64],
+    hdr_cuts: &[u64],
+    expected_offset: i64,
+    max_offset: i64,
+    tolerance: i64,
+) -> (Vec<LocalOffsetContradiction>, Option<String>) {
+    if dv_cuts.len() < LOCAL_MIN_CUTS || hdr_cuts.is_empty() {
+        return (Vec::new(), None);
+    }
+
+    let window_size = LOCAL_WINDOW_CUTS.min(dv_cuts.len());
+    let final_start = dv_cuts.len() - window_size;
+
+    let mut findings = Vec::new();
+    let mut work_remaining = LOCAL_WORK_BUDGET;
+    let mut analysis_limited = false;
+    let mut start = 0usize;
+    loop {
+        let window = &dv_cuts[start..start + window_size];
+        let expected_matches = match matched_anchor_count_bounded(
+            window,
+            hdr_cuts,
+            expected_offset,
+            tolerance,
+            &mut work_remaining,
+        ) {
+            Ok(matches) => matches,
+            Err(()) => {
+                analysis_limited = true;
+                break;
+            }
+        };
+        let alternate = match best_local_alternate(
+            window,
+            hdr_cuts,
+            expected_offset,
+            max_offset,
+            tolerance,
+            &mut work_remaining,
+        ) {
+            Ok(alternate) => alternate,
+            Err(()) => {
+                analysis_limited = true;
+                break;
+            }
+        };
+        let Some((alternate_offset, alternate_matches)) = alternate else {
+            if start == final_start {
+                break;
+            }
+            start = (start + LOCAL_WINDOW_STEP).min(final_start);
+            continue;
+        };
+        let strong_minimum = LOCAL_MIN_CUTS.min(window.len());
+        let beats_expected = alternate_matches >= expected_matches.saturating_add(3)
+            && alternate_matches.saturating_mul(2) >= expected_matches.max(1).saturating_mul(3);
+        if alternate_matches >= strong_minimum && beats_expected {
+            findings.push(LocalOffsetContradiction {
+                dv_start: window[0],
+                dv_end: *window.last().unwrap(),
+                expected_offset,
+                alternate_offset,
+                expected_matches,
+                alternate_matches,
+                window_cuts: window.len(),
+            });
+        }
+        if start == final_start {
+            break;
+        }
+        start = (start + LOCAL_WINDOW_STEP).min(final_start);
+    }
+
+    findings.sort_by_key(|finding| (finding.dv_start, finding.dv_end));
+    let mut merged: Vec<LocalOffsetContradiction> = Vec::new();
+    for finding in findings {
+        if let Some(previous) = merged.last_mut() {
+            if previous.expected_offset == finding.expected_offset
+                && previous.alternate_offset == finding.alternate_offset
+                && finding.dv_start <= previous.dv_end.saturating_add(1)
+            {
+                previous.dv_end = previous.dv_end.max(finding.dv_end);
+                previous.expected_matches = previous.expected_matches.max(finding.expected_matches);
+                previous.alternate_matches =
+                    previous.alternate_matches.max(finding.alternate_matches);
+                previous.window_cuts = previous.window_cuts.max(finding.window_cuts);
+                continue;
+            }
+        }
+        merged.push(finding);
+    }
+    let analysis_limit = analysis_limited.then(|| {
+        format!(
+            "local offset inspection stopped after {LOCAL_WORK_BUDGET} bounded comparisons; temporal evidence is incomplete"
+        )
+    });
+    (merged, analysis_limit)
+}
+
+fn best_local_alternate(
+    window: &[u64],
+    hdr_cuts: &[u64],
+    expected_offset: i64,
+    max_offset: i64,
+    tolerance: i64,
+    work_remaining: &mut usize,
+) -> Result<Option<(i64, usize)>, ()> {
+    let mut votes: HashMap<i64, usize> = HashMap::new();
+    for &dv_frame in window {
+        let (start, end) = hdr_candidate_range(hdr_cuts, dv_frame, max_offset);
+        for &hdr_frame in &hdr_cuts[start..end] {
+            consume_local_work(work_remaining)?;
+            let delta = dv_frame as i128 - hdr_frame as i128;
+            if let Ok(offset) = i64::try_from(delta) {
+                *votes.entry(offset).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Keep only the strongest raw-vote candidates.  Scoring every distinct
+    // offset would make dense, highly permissive inputs expensive, while a
+    // single raw winner can miss tolerance-supported support around it.
+    let mut candidates = Vec::with_capacity(LOCAL_TOP_CANDIDATES);
+    for (&offset, &count) in &votes {
+        candidates.push((offset, count));
+        candidates.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.abs().cmp(&b.0.abs())));
+        if candidates.len() > LOCAL_TOP_CANDIDATES {
+            candidates.pop();
+        }
+    }
+
+    let mut scored_offsets = Vec::new();
+    let mut best: Option<(i64, usize, usize)> = None;
+    let radius = tolerance.min(4);
+    for (candidate, _) in candidates {
+        if scored_offsets
+            .iter()
+            .any(|&seen: &i64| (candidate as i128 - seen as i128).abs() <= 2 * tolerance as i128)
+        {
+            continue;
+        }
+        scored_offsets.push(candidate);
+        for delta in -radius..=radius {
+            let offset = candidate.saturating_add(delta);
+            if (offset as i128 - expected_offset as i128).abs() <= 2 * tolerance as i128 {
+                continue;
+            }
+            let support =
+                matched_anchor_count_bounded(window, hdr_cuts, offset, tolerance, work_remaining)?;
+            if support == 0 {
+                continue;
+            }
+            let exact_votes = votes.get(&offset).copied().unwrap_or(0);
+            if best.is_none_or(|(best_offset, best_support, best_votes)| {
+                support > best_support
+                    || (support == best_support
+                        && (exact_votes > best_votes
+                            || (exact_votes == best_votes && offset.abs() < best_offset.abs())))
+            }) {
+                best = Some((offset, support, exact_votes));
+            }
+        }
+    }
+    Ok(best.map(|(offset, support, _)| (offset, support)))
+}
+
+fn hdr_candidate_range(hdr_cuts: &[u64], dv_frame: u64, max_offset: i64) -> (usize, usize) {
+    let radius = max_offset as u64;
+    let lower = dv_frame.saturating_sub(radius);
+    let upper = dv_frame.saturating_add(radius);
+    let start = hdr_cuts.partition_point(|&hdr_frame| hdr_frame < lower);
+    let end = hdr_cuts.partition_point(|&hdr_frame| hdr_frame <= upper);
+    (start, end)
+}
+
+fn matched_anchor_count_bounded(
+    dv_cuts: &[u64],
+    hdr_cuts: &[u64],
+    offset: i64,
+    tolerance: i64,
+    work_remaining: &mut usize,
+) -> Result<usize, ()> {
+    let Some(&first_dv) = dv_cuts.first() else {
+        return Ok(0);
+    };
+    let first_target = first_dv as i128 - offset as i128;
+    let mut hdr_index = hdr_cuts
+        .partition_point(|&hdr_frame| (hdr_frame as i128) < first_target - tolerance as i128);
+    let mut matches = 0usize;
+    for &dv_frame in dv_cuts {
+        let target = dv_frame as i128 - offset as i128;
+        while hdr_index < hdr_cuts.len()
+            && (hdr_cuts[hdr_index] as i128) < target - tolerance as i128
+        {
+            consume_local_work(work_remaining)?;
+            hdr_index += 1;
+        }
+        if hdr_index >= hdr_cuts.len() {
+            break;
+        }
+        consume_local_work(work_remaining)?;
+        let residual = dv_frame as i128 - hdr_cuts[hdr_index] as i128 - offset as i128;
+        if residual.abs() <= tolerance as i128 {
+            matches += 1;
+            hdr_index += 1;
+        }
+    }
+    Ok(matches)
+}
+
+fn consume_local_work(work_remaining: &mut usize) -> Result<(), ()> {
+    if *work_remaining == 0 {
+        return Err(());
+    }
+    *work_remaining -= 1;
+    Ok(())
+}
+
+fn timeline_gaps<I>(stream: EvidenceStream, frames: u64, anchors: I) -> Vec<UnverifiedInterval>
+where
+    I: Iterator<Item = u64>,
+{
+    if frames == 0 {
+        return Vec::new();
+    }
+    let mut anchors: Vec<u64> = anchors.filter(|&frame| frame < frames).collect();
+    anchors.sort_unstable();
+    anchors.dedup();
+    if anchors.is_empty() {
+        return vec![UnverifiedInterval {
+            stream,
+            start_frame: 0,
+            end_frame: frames - 1,
+            kind: CoverageGapKind::NoMatchedAnchors,
+        }];
+    }
+
+    let mut gaps = Vec::new();
+    if anchors[0] > 0 {
+        gaps.push(UnverifiedInterval {
+            stream,
+            start_frame: 0,
+            end_frame: anchors[0] - 1,
+            kind: CoverageGapKind::Leading,
+        });
+    }
+    for pair in anchors.windows(2) {
+        if pair[1] > pair[0].saturating_add(1) {
+            gaps.push(UnverifiedInterval {
+                stream,
+                start_frame: pair[0] + 1,
+                end_frame: pair[1] - 1,
+                kind: CoverageGapKind::BetweenAnchors,
+            });
+        }
+    }
+    if anchors.last().copied().unwrap() < frames - 1 {
+        gaps.push(UnverifiedInterval {
+            stream,
+            start_frame: anchors.last().copied().unwrap() + 1,
+            end_frame: frames - 1,
+            kind: CoverageGapKind::Trailing,
+        });
+    }
+    gaps
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,6 +761,21 @@ mod tests {
         assert_eq!(sync.offset, 25);
         assert!(sync.matches >= 60, "matches = {}", sync.matches);
         assert_eq!(sync.tercile_offsets, [Some(25), Some(25), Some(25)]);
+
+        let evidence = assess_temporal_alignment(
+            &dv,
+            &hdr,
+            dv.last().copied().unwrap() + 100,
+            hdr.last().copied().unwrap() + 100,
+            sync.offset,
+            7200,
+            1,
+        );
+        assert!(
+            evidence.contradictions.is_empty(),
+            "unexpected local contradiction: {:?}",
+            evidence.contradictions
+        );
     }
 
     #[test]
@@ -375,5 +832,138 @@ mod tests {
         let report = correlate_scene_cuts(&dv, &hdr, 7200, 1);
         assert_eq!(report.dv_count, 60);
         assert_eq!(report.accepted.expect("should accept").offset, 0);
+    }
+
+    #[test]
+    fn temporal_evidence_detects_a_twenty_cut_local_shift() {
+        let dv = synthetic_cuts(300);
+        let mut hdr = dv.clone();
+        for frame in &mut hdr[120..140] {
+            *frame += 48;
+        }
+        hdr.sort_unstable();
+
+        let evidence = assess_temporal_alignment(
+            &dv,
+            &hdr,
+            dv.last().copied().unwrap() + 200,
+            hdr.last().copied().unwrap() + 200,
+            0,
+            7200,
+            1,
+        );
+        assert_eq!(evidence.status, TemporalEvidenceStatus::Contradiction);
+        assert!(
+            evidence
+                .contradictions
+                .iter()
+                .any(|finding| finding.alternate_offset.abs() == 48
+                    && finding.alternate_matches >= 10),
+            "{evidence:?}"
+        );
+    }
+
+    #[test]
+    fn temporal_evidence_accepts_a_global_offset_with_anchor_gaps() {
+        let dv = synthetic_cuts(80);
+        let hdr = cuts_with_offset(&dv, -25);
+        let evidence = assess_temporal_alignment(
+            &dv,
+            &hdr,
+            dv.last().copied().unwrap() + 100,
+            hdr.last().copied().unwrap() + 100,
+            25,
+            7200,
+            1,
+        );
+        assert_eq!(evidence.status, TemporalEvidenceStatus::Consistent);
+        assert_eq!(evidence.matched_anchors.len(), 80);
+        assert!(evidence.contradictions.is_empty());
+        assert!(evidence
+            .unverified_intervals
+            .iter()
+            .any(|gap| gap.kind == CoverageGapKind::Leading));
+    }
+
+    #[test]
+    fn temporal_evidence_marks_sparse_cuts_insufficient_without_contradiction() {
+        let cuts = vec![100, 400];
+        let evidence = assess_temporal_alignment(&cuts, &cuts, 1000, 1000, 0, 7200, 1);
+        assert_eq!(
+            evidence.status,
+            TemporalEvidenceStatus::InsufficientEvidence
+        );
+        assert!(evidence.contradictions.is_empty());
+        assert!(evidence
+            .unverified_intervals
+            .iter()
+            .any(|gap| gap.kind == CoverageGapKind::NoMatchedAnchors
+                || gap.kind == CoverageGapKind::Leading));
+    }
+
+    #[test]
+    fn temporal_evidence_reports_added_tail_to_full_hdr_timeline() {
+        let cuts = vec![100, 400, 800];
+        let evidence = assess_temporal_alignment(&cuts, &cuts, 1000, 1500, 0, 7200, 1);
+        assert!(evidence.unverified_intervals.iter().any(|gap| {
+            gap.stream == EvidenceStream::Hdr
+                && gap.kind == CoverageGapKind::Trailing
+                && gap.start_frame == 801
+                && gap.end_frame == 1499
+        }));
+    }
+
+    #[test]
+    fn six_noisy_local_cuts_are_not_called_a_contradiction() {
+        let dv = synthetic_cuts(80);
+        let mut hdr = dv.clone();
+        for frame in &mut hdr[30..36] {
+            *frame += 5;
+        }
+        hdr.sort_unstable();
+        let evidence = assess_temporal_alignment(
+            &dv,
+            &hdr,
+            dv.last().copied().unwrap() + 100,
+            hdr.last().copied().unwrap() + 100,
+            0,
+            7200,
+            1,
+        );
+        assert!(evidence.contradictions.is_empty());
+    }
+
+    #[test]
+    fn temporal_evidence_completes_a_normal_two_thousand_cut_input() {
+        let dv = synthetic_cuts(2_000);
+        let frames = dv.last().copied().unwrap() + 100;
+        let evidence = assess_temporal_alignment(&dv, &dv, frames, frames, 0, 7200, 1);
+        assert_eq!(evidence.status, TemporalEvidenceStatus::Consistent);
+        assert!(
+            evidence.analysis_limit.is_none(),
+            "unexpected boundedness limit: {:?}",
+            evidence.analysis_limit
+        );
+    }
+
+    #[test]
+    fn temporal_evidence_marks_dense_input_incomplete_at_work_limit() {
+        let dv = synthetic_cuts(2_000);
+        let hdr: Vec<u64> = (1..=500_000).collect();
+        let evidence = assess_temporal_alignment(
+            &dv,
+            &hdr,
+            dv.last().copied().unwrap() + 100,
+            500_100,
+            0,
+            7200,
+            1,
+        );
+        assert!(
+            evidence.analysis_limit.is_some(),
+            "dense input unexpectedly completed: status={:?}",
+            evidence.status
+        );
+        assert_ne!(evidence.status, TemporalEvidenceStatus::Consistent);
     }
 }

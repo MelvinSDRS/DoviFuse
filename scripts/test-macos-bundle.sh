@@ -42,6 +42,12 @@ PY
 "$PYTHON" "$ROOT/scripts/audit_smoke.py"
 "$PYTHON" "$ROOT/scripts/test_donor_eligibility.py"
 "$PYTHON" "$ROOT/scripts/test_mapping_policy.py"
+"$PYTHON" "$ROOT/scripts/test_temporal_alignment.py"
+export DV8_TEMPORAL_LOCAL_FIXTURES="${DV8_TEMPORAL_LOCAL_FIXTURES:-$DV8_AUDIT_FIXTURES/temporal-local}"
+if [[ ! -f "$DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
+  "$PYTHON" "$ROOT/scripts/test_temporal_local_edits.py" --prepare "$DV8_TEMPORAL_LOCAL_FIXTURES"
+fi
+"$PYTHON" "$ROOT/scripts/test_temporal_local_edits.py"
 "$PYTHON" "$ROOT/scripts/test_p5_disabled.py"
 "$PYTHON" "$ROOT/scripts/audit_standard_source.py"
 "$PYTHON" "$ROOT/scripts/test_job_report.py"

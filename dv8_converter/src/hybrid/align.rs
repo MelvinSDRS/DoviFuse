@@ -33,12 +33,13 @@ pub(crate) fn alignment_from_offset(
     if dv_frames == 0 || hdr_frames == 0 {
         return Err("Cannot align: zero frame count".to_string());
     }
-    if offset >= dv_frames as i64 {
+    if offset >= 0 && offset as u64 >= dv_frames {
         return Err(format!(
             "Sync offset {offset} consumes the entire DV RPU ({dv_frames} frames)"
         ));
     }
-    if offset < 0 && (-offset) as u64 >= hdr_frames {
+    let start_pad = offset.unsigned_abs();
+    if offset < 0 && start_pad >= hdr_frames {
         return Err(format!(
             "Sync offset {offset} exceeds HDR target length ({hdr_frames} frames)"
         ));
@@ -52,7 +53,15 @@ pub(crate) fn alignment_from_offset(
     let mut parts: Vec<String> = Vec::new();
 
     // Frames available after the start adjustment (before end adjustment).
-    let after_start = (dv_frames as i64 + (-offset)) as u64;
+    let after_start = if offset >= 0 {
+        dv_frames
+            .checked_sub(offset as u64)
+            .ok_or_else(|| format!("Sync offset {offset} consumes the entire DV RPU"))?
+    } else {
+        dv_frames
+            .checked_add(start_pad)
+            .ok_or_else(|| "Sync offset overflows the DV frame count".to_string())?
+    };
 
     match offset.cmp(&0) {
         std::cmp::Ordering::Greater => {
@@ -60,13 +69,12 @@ pub(crate) fn alignment_from_offset(
             parts.push(format!("trim {offset} RPU frames from start"));
         }
         std::cmp::Ordering::Less => {
-            let k = (-offset) as u64;
             s.duplicates.push(DuplicateOp {
                 source: 0,
                 offset: 0,
-                length: k,
+                length: start_pad,
             });
-            parts.push(format!("pad {k} duplicated frames at start"));
+            parts.push(format!("pad {start_pad} duplicated frames at start"));
         }
         std::cmp::Ordering::Equal => {}
     }
@@ -78,7 +86,15 @@ pub(crate) fn alignment_from_offset(
             // frames only hdr - k originals are needed, hence the same
             // hdr + offset bound.
             let excess = after_start - hdr_frames;
-            let start = (hdr_frames as i64 + offset) as u64;
+            let start = if offset >= 0 {
+                hdr_frames
+                    .checked_add(offset as u64)
+                    .ok_or_else(|| "Sync offset overflows the HDR frame count".to_string())?
+            } else {
+                hdr_frames.checked_sub(start_pad).ok_or_else(|| {
+                    "Sync offset exceeds the HDR frame count after end trim".to_string()
+                })?
+            };
             s.remove_ranges.push(format!("{start}-{}", dv_frames - 1));
             parts.push(format!("trim {excess} frames from end"));
         }
@@ -87,7 +103,13 @@ pub(crate) fn alignment_from_offset(
             // at a lower offset, hence after this one under offset-descending
             // order).
             let missing = hdr_frames - after_start;
-            let kept = dv_frames - offset.max(0) as u64;
+            let kept = if offset >= 0 {
+                dv_frames
+                    .checked_sub(offset as u64)
+                    .ok_or_else(|| "Sync offset consumes the DV RPU".to_string())?
+            } else {
+                dv_frames
+            };
             s.duplicates.push(DuplicateOp {
                 source: kept - 1,
                 offset: kept,
@@ -101,6 +123,9 @@ pub(crate) fn alignment_from_offset(
     if parts.is_empty() {
         parts.push("no adjustment needed".to_string());
     }
+    if !s.duplicates.is_empty() {
+        s.high_risk = true;
+    }
     s.description = format!(
         "Scene-sync offset {offset:+}: {} ({dv_frames} -> {hdr_frames} frames)",
         parts.join(", ")
@@ -109,107 +134,46 @@ pub(crate) fn alignment_from_offset(
     Ok(s)
 }
 
-/// Legacy frame-count-difference heuristic (no scene information). Kept as the
-/// --sync=framecount / --force fallback.
+/// Equal-frame-count fallback when no scene-cut evidence is available. A
+/// differing count cannot establish an offset, so the caller must provide
+/// `--offset` and pass it through `alignment_from_offset` explicitly.
 pub(crate) fn compute_alignment_framecount(
     dv_frames: u64,
     hdr_frames: u64,
-    fps: f64,
+    _fps: f64,
 ) -> AppResult<AlignmentStrategy> {
-    // Preflight rejects zero frame counts, but don't rely on that distant
-    // gate: a zero count here would produce a remove-everything config or a
-    // fully unverified "leave as-is" output.
     if dv_frames == 0 || hdr_frames == 0 {
         return Err("Cannot align: zero frame count".to_string());
     }
-
-    let mut strategy = AlignmentStrategy::default();
-
-    let abs_diff = dv_frames.abs_diff(hdr_frames);
-    strategy.action = "none".to_string();
-    strategy.description = format!("No alignment needed (frame counts match: {dv_frames})");
-
-    if abs_diff == 0 {
-        return Ok(strategy);
+    if dv_frames != hdr_frames {
+        return Err(format!(
+            "Frame counts differ (DV {dv_frames}, HDR {hdr_frames}); provide an explicit --offset"
+        ));
     }
 
-    let small = (fps * 2.0).round() as u64;
-    let medium = (fps * 60.0).round() as u64;
-    let large = (fps * 300.0).round() as u64;
+    Ok(AlignmentStrategy {
+        action: "none".to_string(),
+        description: format!(
+            "Frame counts match ({dv_frames}); offset 0 is unverified without scene-cut evidence"
+        ),
+        ..Default::default()
+    })
+}
 
-    if abs_diff <= small {
-        if dv_frames > hdr_frames {
-            let start = hdr_frames;
-            let end = dv_frames - 1;
-            strategy.action = "remove_end".to_string();
-            strategy.description =
-                format!("Small diff ({abs_diff} frames): trim DV RPU from end ({start}-{end})");
-            strategy.remove_ranges.push(format!("{start}-{end}"));
-        } else {
-            strategy.action = "duplicate_end".to_string();
-            strategy.description =
-                format!("Small diff ({abs_diff} frames): duplicate last RPU metadata at end");
-            strategy.duplicates.push(DuplicateOp {
-                source: dv_frames.saturating_sub(1),
-                offset: dv_frames,
-                length: abs_diff,
-            });
-        }
-        return Ok(strategy);
+/// Require explicit operator approval before applying duplicated edge
+/// metadata. `--force` is intentionally not part of this decision.
+pub(crate) fn require_padding_review(
+    strategy: &AlignmentStrategy,
+    allow_padding: bool,
+) -> AppResult<()> {
+    if strategy.duplicates.is_empty() || allow_padding {
+        return Ok(());
     }
 
-    if abs_diff <= medium {
-        if dv_frames > hdr_frames {
-            let end = abs_diff.saturating_sub(1);
-            strategy.action = "remove_start".to_string();
-            strategy.description =
-                format!("Medium diff ({abs_diff} frames): trim DV RPU from start (0-{end})");
-            strategy.remove_ranges.push(format!("0-{end}"));
-            strategy.start_offset = abs_diff as i64;
-        } else {
-            strategy.action = "duplicate_start".to_string();
-            strategy.description =
-                format!("Medium diff ({abs_diff} frames): duplicate first RPU metadata at start");
-            strategy.duplicates.push(DuplicateOp {
-                source: 0,
-                offset: 0,
-                length: abs_diff,
-            });
-            strategy.start_offset = -(abs_diff as i64);
-        }
-        return Ok(strategy);
-    }
-
-    if abs_diff <= large {
-        strategy.high_risk = true;
-        if dv_frames > hdr_frames {
-            let end = abs_diff.saturating_sub(1);
-            strategy.action = "remove_start".to_string();
-            strategy.description = format!(
-                "Large diff ({abs_diff} frames): HIGH RISK, trim DV RPU from start (0-{end})"
-            );
-            strategy.remove_ranges.push(format!("0-{end}"));
-            strategy.start_offset = abs_diff as i64;
-        } else {
-            strategy.action = "duplicate_start".to_string();
-            strategy.description = format!(
-                "Large diff ({abs_diff} frames): HIGH RISK, duplicate first RPU metadata at start"
-            );
-            strategy.duplicates.push(DuplicateOp {
-                source: 0,
-                offset: 0,
-                length: abs_diff,
-            });
-            strategy.start_offset = -(abs_diff as i64);
-        }
-        return Ok(strategy);
-    }
-
-    strategy.high_risk = true;
-    strategy.description = format!(
-        "Frame diff ({abs_diff}) exceeds 5-minute heuristic at {fps:.3} fps; leaving as-is"
-    );
-    Ok(strategy)
+    Err(format!(
+        "Alignment requires duplicated edge metadata: {}. Review it and re-run with --allow-padding",
+        strategy.description
+    ))
 }
 
 #[cfg(test)]
@@ -312,42 +276,18 @@ mod tests {
     }
 
     #[test]
-    fn framecount_no_diff() {
+    fn framecount_equal_counts_are_unverified_offset_zero() {
         let s = compute_alignment_framecount(1000, 1000, 23.976).unwrap();
         assert_eq!(s.action, "none");
+        assert_eq!(s.start_offset, 0);
+        assert!(s.description.contains("unverified"));
         assert!(s.remove_ranges.is_empty() && s.duplicates.is_empty());
     }
 
     #[test]
-    fn framecount_small_diff_trims_end() {
-        let s = compute_alignment_framecount(1010, 1000, 23.976).unwrap();
-        assert_eq!(s.action, "remove_end");
-        assert_eq!(s.remove_ranges, vec!["1000-1009".to_string()]);
-    }
-
-    #[test]
-    fn framecount_small_diff_pads_end() {
-        let s = compute_alignment_framecount(1000, 1010, 23.976).unwrap();
-        assert_eq!(s.action, "duplicate_end");
-        assert_eq!(s.duplicates.len(), 1);
-        assert_eq!(s.duplicates[0].source, 999);
-        assert_eq!(s.duplicates[0].offset, 1000);
-        assert_eq!(s.duplicates[0].length, 10);
-    }
-
-    #[test]
-    fn framecount_medium_diff_trims_start() {
-        let s = compute_alignment_framecount(2000, 1000, 23.976).unwrap();
-        assert_eq!(s.action, "remove_start");
-        assert_eq!(s.remove_ranges, vec!["0-999".to_string()]);
-        assert!(!s.high_risk);
-    }
-
-    #[test]
-    fn framecount_huge_diff_left_as_is() {
-        let s = compute_alignment_framecount(100_000, 1000, 23.976).unwrap();
-        assert!(s.high_risk);
-        assert!(s.remove_ranges.is_empty() && s.duplicates.is_empty());
+    fn framecount_unequal_counts_require_explicit_offset() {
+        assert!(compute_alignment_framecount(1010, 1000, 23.976).is_err());
+        assert!(compute_alignment_framecount(1000, 1010, 23.976).is_err());
     }
 
     #[test]
@@ -357,5 +297,28 @@ mod tests {
         // "leave as-is".
         assert!(compute_alignment_framecount(0, 1000, 23.976).is_err());
         assert!(compute_alignment_framecount(1000, 0, 23.976).is_err());
+    }
+
+    #[test]
+    fn duplicated_edges_are_high_risk_and_require_review() {
+        let strategy = alignment_from_offset(-40, 1000, 1100).unwrap();
+        assert!(!strategy.duplicates.is_empty());
+        assert!(strategy.high_risk);
+        let error = require_padding_review(&strategy, false).unwrap_err();
+        assert!(error.contains(&strategy.description));
+        assert!(error.contains("--allow-padding"));
+        assert!(require_padding_review(&strategy, true).is_ok());
+    }
+
+    #[test]
+    fn no_padding_needs_no_review() {
+        let strategy = alignment_from_offset(0, 1000, 1000).unwrap();
+        assert!(require_padding_review(&strategy, false).is_ok());
+    }
+
+    #[test]
+    fn offset_overflow_and_extreme_negative_are_rejected() {
+        assert!(alignment_from_offset(i64::MIN, u64::MAX, u64::MAX).is_err());
+        assert!(alignment_from_offset(i64::MAX, i64::MAX as u64, u64::MAX).is_err());
     }
 }

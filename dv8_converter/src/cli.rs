@@ -67,6 +67,16 @@ fn parse_repair_offset(value: &str) -> AppResult<i64> {
     Ok(offset)
 }
 
+fn parse_hybrid_offset(value: &str) -> AppResult<i64> {
+    let offset = value
+        .parse::<i64>()
+        .map_err(|_| format!("Invalid --offset '{value}' (expected signed frames)"))?;
+    if offset.unsigned_abs() > 1_000_000 {
+        return Err("--offset must be between -1000000 and 1000000 frames".to_string());
+    }
+    Ok(offset)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum GradeCheckMode {
     /// Static metadata comparison only (no pixel measurement).
@@ -91,7 +101,7 @@ pub(crate) enum LetterboxMode {
 pub(crate) enum SyncMode {
     /// Scene-cut correlation between the DV RPU and the HDR target (default).
     Scenes,
-    /// Legacy frame-count-difference heuristic.
+    /// Equal-frame-count check; unequal counts require an explicit offset.
     Framecount,
 }
 
@@ -103,6 +113,10 @@ pub(crate) struct HybridOptions {
     pub(crate) force: bool,
     pub(crate) scene_threshold: f64,
     pub(crate) max_offset: Option<u64>,
+    /// Explicit alignment: dv_frame = hdr_frame + explicit_offset.
+    pub(crate) explicit_offset: Option<i64>,
+    /// Approve duplicated edge metadata after reviewing the explicit offset.
+    pub(crate) allow_padding: bool,
     pub(crate) grade_check: GradeCheckMode,
     pub(crate) skip_grade_check: bool,
     pub(crate) grade_windows: usize,
@@ -120,6 +134,8 @@ impl Default for HybridOptions {
             force: false,
             scene_threshold: 8.0,
             max_offset: None,
+            explicit_offset: None,
+            allow_padding: false,
             grade_check: GradeCheckMode::Sampled,
             skip_grade_check: false,
             grade_windows: 6,
@@ -155,9 +171,13 @@ Hybrid-only options:\n\
   --delete-sources  Request input deletion (withheld while active-area coverage is unverified)\n\
                     (default: keep both originals)\n\
   --sync <mode>     Alignment mode: scenes (scene-cut correlation, default)\n\
-                    or framecount (legacy frame-count heuristic)\n\
-  --force           Fall back to the framecount heuristic when scene-cut\n\
-                    correlation fails instead of aborting\n\
+                    or framecount (equal-count check; unequal counts require --offset)\n\
+  --offset <frames> Explicit alignment, dv_frame = hdr_frame + offset\n\
+                    (signed -1000000..1000000, including 0)\n\
+  --allow-padding   Approve duplicated edge metadata (also valid for --repair-sync)\n\
+                    after reviewing the alignment; --force never approves padding\n\
+  --force           Fall back to the equal-frame-count check when scene-cut\n\
+                    correlation fails; --force never approves padding\n\
   --scene-threshold <f>  scdet scene-change threshold (default: 8.0)\n\
   --max-offset <n>  Max frame offset searched during correlation\n\
                     (default: 5 minutes worth of frames)\n\
@@ -317,6 +337,18 @@ fn parse_args_from(original_args: Vec<String>) -> AppResult<CliArgs> {
                     );
                     hybrid_only_flags.push(arg.clone());
                 }
+                "--offset" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err("Missing value for --offset".to_string());
+                    }
+                    hybrid.explicit_offset = Some(parse_hybrid_offset(&args[i])?);
+                    hybrid_only_flags.push(arg.clone());
+                }
+                "--allow-padding" => {
+                    hybrid.allow_padding = true;
+                    hybrid_only_flags.push(arg.clone());
+                }
                 "--grade-check" => {
                     i += 1;
                     if i >= args.len() {
@@ -414,6 +446,9 @@ fn parse_args_from(original_args: Vec<String>) -> AppResult<CliArgs> {
         if custom_output.is_some() && repair_sync_offset.is_none() {
             return Err("-o is only valid with --hybrid or --repair-sync".to_string());
         }
+        if repair_sync_offset.is_some() {
+            hybrid_only_flags.retain(|flag| flag != "--allow-padding");
+        }
         if let Some(flag) = hybrid_only_flags.first() {
             return Err(format!("{flag} is only valid with --hybrid"));
         }
@@ -492,6 +527,52 @@ mod tests {
         assert!(parse_repair_offset("nope").is_err());
         assert!(parse_hwaccel("cuda").is_err());
         assert!(parse_progress("xml").is_err());
+    }
+
+    #[test]
+    fn hybrid_offset_accepts_signed_range_including_zero() {
+        fn parse(args: &[&str]) -> AppResult<CliArgs> {
+            parse_args_from(args.iter().map(|s| s.to_string()).collect())
+        }
+
+        for (value, expected) in [("-1000000", -1_000_000), ("0", 0), ("1000000", 1_000_000)] {
+            let cli = parse(&["--hybrid", "--offset", value, "dv.mkv", "hdr.mkv"]).unwrap();
+            assert_eq!(cli.hybrid.explicit_offset, Some(expected));
+            assert!(!cli.hybrid.allow_padding);
+        }
+
+        let cli = parse(&[
+            "--hybrid",
+            "--offset",
+            "-25",
+            "--allow-padding",
+            "dv.mkv",
+            "hdr.mkv",
+        ])
+        .unwrap();
+        assert_eq!(cli.hybrid.explicit_offset, Some(-25));
+        assert!(cli.hybrid.allow_padding);
+
+        for value in ["-1000001", "1000001", "nope"] {
+            assert!(
+                parse(&["--hybrid", "--offset", value, "dv.mkv", "hdr.mkv"]).is_err(),
+                "accepted invalid hybrid offset {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn offset_and_padding_flags_are_scoped_to_supported_modes() {
+        fn parse(args: &[&str]) -> AppResult<CliArgs> {
+            parse_args_from(args.iter().map(|s| s.to_string()).collect())
+        }
+
+        assert!(parse(&["--offset", "0", "movie.mkv"]).is_err());
+        assert!(parse(&["--allow-padding", "movie.mkv"]).is_err());
+        let repair = parse(&["--repair-sync", "5", "--allow-padding", "movie.mkv"]).unwrap();
+        assert!(repair.hybrid.allow_padding);
+        assert!(parse(&["--repair-sync", "5", "--offset", "0", "movie.mkv"]).is_err());
+        assert!(parse(&["--check", "--allow-padding", "movie.mkv"]).is_err());
     }
 
     #[test]

@@ -42,6 +42,7 @@ struct AppModelAuditTests {
         model.bindCheckedInput(InputIdentity(old))
         model.checkResults = [CheckResult(id: "sync", label: "Sync", status: "fail", detail: "Offset", fixAction: "sync-offset", fixValue: 5)]
         assert(model.canFix)
+        assert(model.repairPaddingDetail.contains("5 frames") && model.repairPaddingDetail.contains("unverified"))
         try! Data("changed in place".utf8).write(to: old)
         assert(!model.canFix, "Changed bytes/size at the same path must block stale repair")
         model.bindCheckedInput(InputIdentity(old))

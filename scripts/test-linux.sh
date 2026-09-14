@@ -32,6 +32,12 @@ python3 scripts/verify_reference_catalog.py
 python3 scripts/audit_smoke.py
 python3 scripts/test_donor_eligibility.py
 python3 scripts/test_mapping_policy.py
+python3 scripts/test_temporal_alignment.py
+export DV8_TEMPORAL_LOCAL_FIXTURES="${DV8_TEMPORAL_LOCAL_FIXTURES:-$DV8_AUDIT_FIXTURES/temporal-local}"
+if [[ ! -f "$DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
+  python3 scripts/test_temporal_local_edits.py --prepare "$DV8_TEMPORAL_LOCAL_FIXTURES"
+fi
+python3 scripts/test_temporal_local_edits.py
 python3 scripts/test_p5_disabled.py
 python3 scripts/audit_standard_source.py
 python3 scripts/test_job_report.py
