@@ -166,6 +166,15 @@ Temporal edits run before target-indexed L5 edits. The pipeline then injects,
 remuxes, decodes the output and verifies metadata and container transport.
 Scene anchors and sampled crops do not establish whole-film picture alignment.
 
+Complete target HDR10 static fields are applied to L6 on every hybrid RPU,
+even when donor and target container tags match. The mastering minimum uses
+0.0001-nit units; explicit zero remains zero. Missing target fields leave donor
+L6 intact with reconciliation marked inconclusive. Invalid or unrepresentable
+values are rejected. Sync repair preserves L6.
+This does not rewrite L9 mastering primaries or establish grade compatibility.
+After remuxing, every parsed output RPU is compared with the final edited RPU,
+including trims and display metadata; only the encoding CRC is excluded.
+
 Hybrid-only flags:
 
 - `--sync <scenes|framecount>`: alignment mode (default `scenes`).

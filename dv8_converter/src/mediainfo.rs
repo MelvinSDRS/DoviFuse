@@ -35,6 +35,7 @@ pub(crate) struct HybridMediaInfo {
     pub(crate) max_fall: Option<u16>,
     pub(crate) mastering_min_nits: Option<f64>,
     pub(crate) mastering_max_nits: Option<f64>,
+    pub(crate) static_metadata_errors: Vec<String>,
 }
 
 pub(crate) fn parse_int(s: &str) -> Option<u64> {
@@ -46,8 +47,22 @@ pub(crate) fn parse_int(s: &str) -> Option<u64> {
     }
 }
 
-pub(crate) fn parse_u16(s: &str) -> Option<u16> {
-    parse_int(s).and_then(|v| u16::try_from(v).ok())
+fn parse_light_level(raw: &str, name: &str, errors: &mut Vec<String>) -> Option<u16> {
+    if raw.trim().is_empty() {
+        return None;
+    }
+    let numeric = raw
+        .strip_suffix("cd/m2")
+        .unwrap_or(raw)
+        .trim()
+        .replace([',', ' '], "");
+    match numeric.parse::<u16>() {
+        Ok(value) => Some(value),
+        Err(_) => {
+            errors.push(format!("Invalid {name} value: {raw}"));
+            None
+        }
+    }
 }
 
 pub(crate) fn parse_float(s: &str) -> Option<f64> {
@@ -59,43 +74,23 @@ pub(crate) fn parse_float(s: &str) -> Option<f64> {
 }
 
 pub(crate) fn parse_mastering_luminance(raw: &str) -> (Option<f64>, Option<f64>) {
-    let mut nums: Vec<f64> = Vec::new();
-    let mut buf = String::new();
-
-    for ch in raw.chars() {
-        if ch.is_ascii_digit() || ch == '.' {
-            buf.push(ch);
-        } else if !buf.is_empty() {
-            if let Ok(v) = buf.parse::<f64>() {
-                nums.push(v);
-            }
-            buf.clear();
+    // Read labeled values, never the "2" from cd/m2 or the extrema of
+    // unrelated numbers. Preserve the declared ordering and sign so the
+    // reconciliation policy can reject invalid metadata instead of repairing it.
+    fn field(raw: &str, label: &str) -> Option<f64> {
+        let mut matches = raw.match_indices(label);
+        let (index, _) = matches.next()?;
+        if matches.next().is_some() {
+            return None;
         }
+        let token = raw[index + label.len()..].split_whitespace().next()?;
+        token
+            .trim_end_matches(',')
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite())
     }
-
-    if !buf.is_empty() {
-        if let Ok(v) = buf.parse::<f64>() {
-            nums.push(v);
-        }
-    }
-
-    if nums.len() < 2 {
-        return (None, None);
-    }
-
-    let mut min = nums[0];
-    let mut max = nums[0];
-
-    for n in nums {
-        if n < min {
-            min = n;
-        }
-        if n > max {
-            max = n;
-        }
-    }
-
-    (Some(min), Some(max))
+    (field(raw, "min:"), field(raw, "max:"))
 }
 
 pub(crate) fn fps_from_info(info: &HybridMediaInfo) -> Option<f64> {
@@ -432,7 +427,19 @@ pub(crate) fn parse_hybrid_media_info(out: &str) -> Option<HybridMediaInfo> {
 
     let mastering = get(17);
     let (mastering_min_nits, mastering_max_nits) = parse_mastering_luminance(&mastering);
-    let _ = get(14);
+    let mut static_metadata_errors = Vec::new();
+    let max_cll = parse_light_level(&get(15), "MaxCLL", &mut static_metadata_errors);
+    let max_fall = parse_light_level(&get(16), "MaxFALL", &mut static_metadata_errors);
+    for (label, value) in [("min:", mastering_min_nits), ("max:", mastering_max_nits)] {
+        if mastering.contains(label) && value.is_none() {
+            static_metadata_errors.push(format!(
+                "Invalid mastering luminance {label} in {mastering}"
+            ));
+        }
+    }
+    if !mastering.is_empty() && !mastering.contains("min:") && !mastering.contains("max:") {
+        static_metadata_errors.push(format!("Unrecognized mastering luminance: {mastering}"));
+    }
 
     Some(HybridMediaInfo {
         codec: get(0),
@@ -449,8 +456,9 @@ pub(crate) fn parse_hybrid_media_info(out: &str) -> Option<HybridMediaInfo> {
         colour_primaries: get(11),
         transfer_characteristics: get(12),
         frame_rate_mode: get(13),
-        max_cll: parse_u16(&get(15)),
-        max_fall: parse_u16(&get(16)),
+        max_cll,
+        max_fall,
+        static_metadata_errors,
         mastering_min_nits,
         mastering_max_nits,
         // These fields were appended to preserve the established parser
@@ -547,9 +555,44 @@ mod tests {
     }
 
     #[test]
+    fn mastering_luminance_uses_labels_not_unit_digits_or_extrema() {
+        assert_eq!(
+            parse_mastering_luminance("min: 5 cd/m2, max: 1000 cd/m2"),
+            (Some(5.0), Some(1000.0))
+        );
+        assert_eq!(
+            parse_mastering_luminance("max: 0 cd/m2, min: 1 cd/m2"),
+            (Some(1.0), Some(0.0))
+        );
+        assert_eq!(
+            parse_mastering_luminance("min: -0.005 cd/m2, max: 1000 cd/m2"),
+            (Some(-0.005), Some(1000.0))
+        );
+        assert_eq!(
+            parse_mastering_luminance("min: 0 cd/m2, max: 0 cd/m2"),
+            (Some(0.0), Some(0.0))
+        );
+    }
+
+    #[test]
+    fn malformed_light_levels_remain_distinct_from_missing() {
+        let mut errors = Vec::new();
+        assert_eq!(parse_light_level("", "MaxCLL", &mut errors), None);
+        assert!(errors.is_empty());
+        for raw in ["65536", "-1000", "10.5", "invalid"] {
+            assert_eq!(parse_light_level(raw, "MaxCLL", &mut errors), None);
+        }
+        assert_eq!(errors.len(), 4);
+        assert_eq!(
+            parse_light_level("1 000 cd/m2", "MaxCLL", &mut errors),
+            Some(1000)
+        );
+    }
+
+    #[test]
     fn mastering_luminance_missing() {
         assert_eq!(parse_mastering_luminance(""), (None, None));
-        assert_eq!(parse_mastering_luminance("max: 1000"), (None, None));
+        assert_eq!(parse_mastering_luminance("max: 1000"), (None, Some(1000.0)));
     }
 
     #[test]

@@ -75,6 +75,9 @@ jobs:
             /tmp/dv8-donor-eligibility-*/*.report.json
             /tmp/dv8-mapping-*/*.log
             /tmp/dv8-mapping-*/summary.json
+            /tmp/dv8-metadata-*/summary.json
+            /tmp/dv8-metadata-*/*.log
+            /tmp/dv8-metadata-*/*.report.json
             /tmp/dv8-temporal-*/*.log
             /tmp/dv8-temporal-*/*.json
             /tmp/dv8-picture-coverage-*/*.log
@@ -149,6 +152,9 @@ jobs:
             /tmp/dv8-donor-eligibility-*/*.report.json
             /tmp/dv8-mapping-*/*.log
             /tmp/dv8-mapping-*/summary.json
+            /tmp/dv8-metadata-*/summary.json
+            /tmp/dv8-metadata-*/*.log
+            /tmp/dv8-metadata-*/*.report.json
             /tmp/dv8-temporal-*/*.log
             /tmp/dv8-temporal-*/*.json
             /tmp/dv8-picture-coverage-*/*.log

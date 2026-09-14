@@ -8,6 +8,7 @@ pub(crate) mod letterbox;
 mod mapping;
 pub(crate) mod preflight;
 pub(crate) mod scenes;
+mod transport;
 pub(crate) mod validate;
 
 use std::ffi::OsString;
@@ -364,6 +365,7 @@ fn process_hybrid_impl(
     let hdr_scenes_txt = tmp_dir.join(format!("{base}.hybrid.hdr_scenes.txt"));
     let hybrid_l5_json = tmp_dir.join(format!("{base}.hybrid.l5.json"));
     let mapping_json = tmp_dir.join(format!("{base}.hybrid.mapping.json"));
+    let transport_json = tmp_dir.join(format!("{base}.hybrid.transport.json"));
     let verify_rpu = tmp_dir.join(format!("{base}.hybrid.verify.rpu.bin"));
     // Like the scene lists, verify_scenes stays out of the CleanupGuard so a
     // sync-verification failure leaves it behind for inspection.
@@ -383,6 +385,7 @@ fn process_hybrid_impl(
         &hybrid_editor_json,
         &hybrid_l5_json,
         &mapping_json,
+        &transport_json,
         &verify_rpu,
     ];
     if let Some(existing) = intermediates.iter().find(|p| p.exists()) {
@@ -653,21 +656,22 @@ fn process_hybrid_impl(
         &hybrid_editor_json,
     )?;
 
-    if allow_same_input {
-        // A sync repair must move the original metadata, preserving mapping and trims.
-        let mut config = editor::build_editor_config(
-            &strategy,
-            mapping_policy,
-            &dv_info,
-            &hdr_info,
-            &ActiveAreaChoice::Keep,
-        );
-        config.level6 = None;
-        fs::write(
-            &hybrid_editor_json,
-            serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
+    let edit_plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(&hybrid_editor_json).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let target_l6 = edit_plan.get("level6").cloned();
+    logger.measurement("l6_reconciliation", serde_json::json!({
+        "policy": if target_l6.is_some() { "apply_complete_target" } else { "preserve_donor" },
+        "target_l6": target_l6,
+        "minimum_unit": "0.0001 nit",
+        "other_units": "1 nit",
+        "reason": if allow_same_input { "Sync repair preserves existing metadata" }
+            else if target_l6.is_some() { "Complete target fields applied independently of donor container tags; actual edited RPUs are checked" }
+            else { "Target static metadata is incomplete; donor L6 retained, target reconciliation unverified" },
+    }));
+    if !allow_same_input && target_l6.is_none() {
+        logger.check_result("target_l6", "Target L6 reconciliation", "inconclusive",
+            "Target static fields are incomplete. Donor L6 is retained; no missing values are inferred from brightness measurements.");
     }
 
     run_status(
@@ -717,6 +721,19 @@ fn process_hybrid_impl(
         rt,
         logger,
     )?;
+
+    let expected_metadata = transport::capture(
+        &hybrid_aligned_rpu,
+        &transport_json,
+        hdr_info.frame_count,
+        target_l6.as_ref(),
+        rt,
+        logger,
+    )?;
+    if target_l6.is_some() {
+        logger.check_result("target_l6", "Target L6 reconciliation", "pass",
+            "Every edited RPU carries the complete target L6. Other creative/display blocks are not rewritten by this reconciliation.");
+    }
 
     logger.step("10 | Extract HEVC from HDR target");
     let track_id = get_hevc_track_id(hdr_target, rt, logger)?;
@@ -876,6 +893,27 @@ fn process_hybrid_impl(
             "Every re-extracted output RPU has the supported identity mapping. This verifies mapping transport, not picture-grade compatibility.",
         );
     }
+
+    let actual_metadata = transport::capture(
+        &verify_rpu,
+        &transport_json,
+        hdr_info.frame_count,
+        None,
+        rt,
+        logger,
+    )
+    .map_err(fail_output)?;
+    if let Err(error) = transport::verify(&expected_metadata, &actual_metadata) {
+        logger.check_result(
+            "output_metadata_transport",
+            "Output metadata transport",
+            "fail",
+            &error,
+        );
+        return Err(fail_output(error));
+    }
+    logger.check_result("output_metadata_transport", "Output metadata transport", "pass",
+        "Every re-extracted RPU matches the final edited metadata, including L1, trims, mapping, L5, L6 and L9. Only the encoding CRC is excluded; this does not verify suitability for the picture.");
 
     logger.step("15 | Cleanup");
     let _ = fs::remove_file(&hybrid_rpu);

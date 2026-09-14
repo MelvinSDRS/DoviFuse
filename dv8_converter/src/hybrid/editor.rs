@@ -57,35 +57,97 @@ pub(crate) struct ActiveAreaPreset {
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Level6Meta {
+    /// L6 stores this field as whole nits, bounded by dovi_tool's
+    /// `MAX_PQ_LUMINANCE` (10,000).
     pub(crate) max_display_mastering_luminance: u16,
+    /// L6 stores this field in 1/10,000 nit units, bounded by 10,000
+    /// (therefore a valid mastering minimum is at most 1 nit).
     pub(crate) min_display_mastering_luminance: u16,
+    /// L6 stores this field as whole nits, bounded by 10,000.
     pub(crate) max_content_light_level: u16,
+    /// L6 stores this field as whole nits, bounded by 10,000.
     pub(crate) max_frame_average_light_level: u16,
 }
 
-pub(crate) fn l6_from_media_info(info: &HybridMediaInfo) -> Option<Level6Meta> {
-    let max_cll = info.max_cll?;
-    let max_fall = info.max_fall?;
-    let min_nits = info.mastering_min_nits?;
-    let max_nits = info.mastering_max_nits?;
+const MAX_L6_VALUE: u16 = 10_000;
 
-    let mut min_display = if min_nits <= 1.0 {
-        (min_nits * 10000.0).round() as u16
-    } else {
-        min_nits.round() as u16
+fn rounded_l6_nits(value: Option<f64>, field: &str) -> AppResult<Option<u16>> {
+    let Some(value) = value else {
+        return Ok(None);
     };
-    if min_display == 0 {
-        min_display = 1;
+    if !value.is_finite() || !(0.0..=f64::from(MAX_L6_VALUE)).contains(&value) {
+        return Err(format!(
+            "HDR target L6 {field} must be finite and in the range 0..={MAX_L6_VALUE} nits; got {value}"
+        ));
     }
 
-    let max_display = max_nits.round().clamp(1.0, 10000.0) as u16;
+    let rounded = value.round();
+    if !(0.0..=f64::from(MAX_L6_VALUE)).contains(&rounded) {
+        return Err(format!(
+            "HDR target L6 {field} rounds outside the range 0..={MAX_L6_VALUE} nits; got {value}"
+        ));
+    }
+    Ok(Some(rounded as u16))
+}
 
-    Some(Level6Meta {
+fn mastering_min_l6_units(value: Option<f64>) -> AppResult<Option<u16>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    // The vendored dovi_tool L6 block writes this field as 1/10,000 nit
+    // units. A value above 1 nit cannot be represented by a valid L6 u16.
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        return Err(format!(
+            "HDR target L6 min_display_mastering_luminance must be finite and in the range 0..=1 nit (encoded 0..={MAX_L6_VALUE}); got {value} nits"
+        ));
+    }
+
+    let units = (value * f64::from(MAX_L6_VALUE)).round();
+    if !(0.0..=f64::from(MAX_L6_VALUE)).contains(&units) {
+        return Err(format!(
+            "HDR target L6 min_display_mastering_luminance rounds outside the encoded range 0..={MAX_L6_VALUE}; got {value} nits"
+        ));
+    }
+    Ok(Some(units as u16))
+}
+
+fn bounded_l6_value(value: Option<u16>, field: &str) -> AppResult<Option<u16>> {
+    match value {
+        None => Ok(None),
+        Some(value) if value <= MAX_L6_VALUE => Ok(Some(value)),
+        Some(value) => Err(format!(
+            "HDR target L6 {field} must be in the range 0..={MAX_L6_VALUE} nits; got {value}"
+        )),
+    }
+}
+
+pub(crate) fn l6_from_media_info(info: &HybridMediaInfo) -> AppResult<Option<Level6Meta>> {
+    if !info.static_metadata_errors.is_empty() {
+        return Err(format!(
+            "HDR target L6 metadata is invalid: {}",
+            info.static_metadata_errors.join("; ")
+        ));
+    }
+    // L6 is an all-or-nothing override. In particular, do not fill an
+    // absent field from another source or turn an explicit zero into a
+    // guessed minimum of one.
+    let max_cll = bounded_l6_value(info.max_cll, "max_content_light_level")?;
+    let max_fall = bounded_l6_value(info.max_fall, "max_frame_average_light_level")?;
+    let min_display = mastering_min_l6_units(info.mastering_min_nits)?;
+    let max_display = rounded_l6_nits(info.mastering_max_nits, "max_display_mastering_luminance")?;
+
+    let (Some(max_cll), Some(max_fall), Some(min_display), Some(max_display)) =
+        (max_cll, max_fall, min_display, max_display)
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(Level6Meta {
         max_display_mastering_luminance: max_display,
-        min_display_mastering_luminance: min_display.min(10000),
-        max_content_light_level: max_cll.min(10000),
-        max_frame_average_light_level: max_fall.min(10000),
-    })
+        min_display_mastering_luminance: min_display,
+        max_content_light_level: max_cll,
+        max_frame_average_light_level: max_fall,
+    }))
 }
 
 fn preset_from_bars(id: u16, b: &Bars) -> ActiveAreaPreset {
@@ -108,10 +170,10 @@ fn edits_all(id: u16) -> BTreeMap<String, u16> {
 pub(crate) fn build_editor_config(
     strategy: &AlignmentStrategy,
     mapping_policy: MappingPolicy,
-    dv_info: &HybridMediaInfo,
+    _dv_info: &HybridMediaInfo,
     hdr_info: &HybridMediaInfo,
     active_area: &ActiveAreaChoice,
-) -> EditorConfig {
+) -> AppResult<EditorConfig> {
     let mode = mapping_policy.editor_mode();
 
     let remove = if strategy.remove_ranges.is_empty() {
@@ -145,11 +207,18 @@ pub(crate) fn build_editor_config(
         }),
     };
 
-    let dv_l6 = l6_from_media_info(dv_info);
-    let hdr_l6 = l6_from_media_info(hdr_info);
-    let level6 = hdr_l6.filter(|target| dv_l6.as_ref() != Some(target));
+    // A sync repair edits the donor's RPU against the same pictures, so its
+    // existing L6 must remain untouched. Every other hybrid path deliberately
+    // applies the complete known target L6, even when the container metadata
+    // happens to match the donor's container metadata.
+    let level6 = match mapping_policy {
+        MappingPolicy::PreserveForSyncRepair => None,
+        MappingPolicy::Profile8Identity | MappingPolicy::Profile7Compatibility => {
+            l6_from_media_info(hdr_info)?
+        }
+    };
 
-    EditorConfig {
+    Ok(EditorConfig {
         mode,
         remove_cmv4: false,
         remove_mapping: false,
@@ -157,7 +226,7 @@ pub(crate) fn build_editor_config(
         duplicate,
         active_area,
         level6,
-    }
+    })
 }
 
 pub(crate) fn hybrid_build_editor_json(
@@ -168,7 +237,7 @@ pub(crate) fn hybrid_build_editor_json(
     active_area: &ActiveAreaChoice,
     json_output_path: &Path,
 ) -> AppResult<()> {
-    let config = build_editor_config(strategy, mapping_policy, dv_info, hdr_info, active_area);
+    let config = build_editor_config(strategy, mapping_policy, dv_info, hdr_info, active_area)?;
 
     let mut json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize editor config: {e}"))?;
@@ -236,7 +305,8 @@ mod tests {
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert_eq!(
             render(&c),
             r#"{
@@ -255,7 +325,8 @@ mod tests {
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert_eq!(c.mode, 0);
         assert!(!c.remove_mapping);
         assert!(render(&c).contains("\"mode\": 0"));
@@ -269,7 +340,8 @@ mod tests {
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert_eq!(
             render(&c),
             r#"{
@@ -292,7 +364,8 @@ mod tests {
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert_eq!(
             render(&c),
             r#"{
@@ -320,7 +393,8 @@ mod tests {
             &info(3840, 2160),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert_eq!(
             render(&c),
             r#"{
@@ -354,7 +428,8 @@ mod tests {
                 top: 276,
                 bottom: 276,
             }),
-        );
+        )
+        .unwrap();
         assert_eq!(
             render(&c),
             r#"{
@@ -388,7 +463,8 @@ mod tests {
             &info(3840, 1608),
             &info(3840, 2160),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert!(c.active_area.is_none());
     }
 
@@ -400,7 +476,8 @@ mod tests {
             &info_with_l6(3840, 2160, 4000.0, 4000),
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &ActiveAreaChoice::Keep,
-        );
+        )
+        .unwrap();
         assert_eq!(
             render(&c),
             r#"{
@@ -418,62 +495,112 @@ mod tests {
     }
 
     #[test]
-    fn level6_skipped_when_equal() {
+    fn level6_applied_when_container_metadata_matches() {
         let c = build_editor_config(
             &strategy(&[], &[]),
             MappingPolicy::Profile8Identity,
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &info_with_l6(3840, 2160, 1000.0, 1000),
             &ActiveAreaChoice::Keep,
+        )
+        .unwrap();
+        assert_eq!(
+            c.level6,
+            l6_from_media_info(&info_with_l6(3840, 2160, 1000.0, 1000)).unwrap()
         );
+    }
+
+    #[test]
+    fn invalid_present_metadata_cannot_be_treated_as_missing() {
+        let mut target = info(1, 1);
+        target
+            .static_metadata_errors
+            .push("Invalid MaxCLL value: 65536".into());
+        assert!(l6_from_media_info(&target).unwrap_err().contains("65536"));
+    }
+
+    #[test]
+    fn sync_repair_preserves_donor_level6() {
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            MappingPolicy::PreserveForSyncRepair,
+            &info_with_l6(3840, 2160, 4000.0, 4000),
+            &info_with_l6(3840, 2160, 1000.0, 1000),
+            &ActiveAreaChoice::Keep,
+        )
+        .unwrap();
         assert!(c.level6.is_none());
     }
 
     #[test]
-    fn level6_applied_when_dv_missing() {
-        let c = build_editor_config(
-            &strategy(&[], &[]),
-            MappingPolicy::Profile8Identity,
-            &info(3840, 2160),
-            &info_with_l6(3840, 2160, 1000.0, 1000),
-            &ActiveAreaChoice::Keep,
-        );
-        assert_eq!(
-            c.level6,
-            Some(Level6Meta {
-                max_display_mastering_luminance: 1000,
-                min_display_mastering_luminance: 50,
-                max_content_light_level: 1000,
-                max_frame_average_light_level: 400,
-            })
-        );
-    }
-
-    #[test]
-    fn l6_min_luminance_scaling() {
-        // Fractional nits are stored as 1/10000 nit units; integer nits kept.
+    fn l6_uses_authoritative_units_for_fractional_and_high_max_luminance() {
         let frac = info_with_l6(1, 1, 1000.0, 1000);
         assert_eq!(
             l6_from_media_info(&frac)
                 .unwrap()
+                .unwrap()
                 .min_display_mastering_luminance,
             50
         );
-        let mut int_nits = info_with_l6(1, 1, 1000.0, 1000);
-        int_nits.mastering_min_nits = Some(5.0);
+
+        let high_max = info_with_l6(1, 1, 4000.0, 4000);
         assert_eq!(
-            l6_from_media_info(&int_nits)
+            l6_from_media_info(&high_max)
                 .unwrap()
-                .min_display_mastering_luminance,
-            5
+                .unwrap()
+                .max_display_mastering_luminance,
+            4000
         );
-        let mut zero = info_with_l6(1, 1, 1000.0, 1000);
-        zero.mastering_min_nits = Some(0.00001);
+    }
+
+    #[test]
+    fn l6_preserves_explicit_zero_values() {
+        let zero = HybridMediaInfo {
+            max_cll: Some(0),
+            max_fall: Some(0),
+            mastering_min_nits: Some(0.0),
+            mastering_max_nits: Some(0.0),
+            ..Default::default()
+        };
         assert_eq!(
-            l6_from_media_info(&zero)
-                .unwrap()
-                .min_display_mastering_luminance,
-            1
+            l6_from_media_info(&zero),
+            Ok(Some(Level6Meta {
+                max_display_mastering_luminance: 0,
+                min_display_mastering_luminance: 0,
+                max_content_light_level: 0,
+                max_frame_average_light_level: 0,
+            }))
         );
+    }
+
+    #[test]
+    fn l6_rejects_unrepresentable_minimum_and_out_of_range_values() {
+        let mut min_above_one_nit = info_with_l6(1, 1, 1000.0, 1000);
+        min_above_one_nit.mastering_min_nits = Some(1.0001);
+        assert!(l6_from_media_info(&min_above_one_nit).is_err());
+
+        let mut max_above_l6_limit = info_with_l6(1, 1, 10000.1, 1000);
+        assert!(l6_from_media_info(&max_above_l6_limit).is_err());
+
+        max_above_l6_limit.mastering_max_nits = Some(1000.0);
+        max_above_l6_limit.max_cll = Some(MAX_L6_VALUE + 1);
+        assert!(l6_from_media_info(&max_above_l6_limit).is_err());
+    }
+
+    #[test]
+    fn l6_rejects_incomplete_target_metadata_without_inventing_values() {
+        let mut incomplete = info_with_l6(1, 1, 1000.0, 1000);
+        incomplete.max_fall = None;
+        assert_eq!(l6_from_media_info(&incomplete).unwrap(), None);
+
+        let c = build_editor_config(
+            &strategy(&[], &[]),
+            MappingPolicy::Profile8Identity,
+            &info_with_l6(1, 1, 4000.0, 4000),
+            &incomplete,
+            &ActiveAreaChoice::Keep,
+        )
+        .unwrap();
+        assert!(c.level6.is_none());
     }
 }
