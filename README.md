@@ -158,16 +158,13 @@ analysis tools, fixtures and research are preserved on `codex/p5-workflow`.
 ./DV7toDV8.sh --hybrid -o /path/to/output.mkv /path/to/dv_source.mkv /path/to/hdr_target.mkv
 ```
 
-The hybrid pipeline: preflight checks (codec, fps, resolution, static HDR
-metadata gate) → extract RPU → **scene-cut sync** (correlates the RPU's
-scene cuts against an ffmpeg scan of the target to find and fix the exact
-frame offset) → **grade check** (samples brightness windows from both
-sources and aborts when the HDR grades differ, e.g. a 4000-nit DV master
-vs a 1000-nit Blu-ray trim; a pass is a brightness heuristic, not proof of equal grades) → **measured letterbox L5** (cropdetect sets
-the active-area metadata) → dovi_tool editor (mode 0 for P8.1, mode 2 for P7) →
-inject RPU → remux → validation → **post-inject sync verification**
-(re-extracts the RPU from the output and requires scene cuts to line up
-at offset 0 across the whole runtime).
+The hybrid pipeline checks supported inputs, extracts the RPU and estimates
+one temporal offset from scene evidence. A brightness/chroma screen rejects
+measured mismatches and records its coverage; it cannot verify the creative
+grade. Adequately observed stable bars can supply a constant target L5 edit.
+Temporal edits run before target-indexed L5 edits. The pipeline then injects,
+remuxes, decodes the output and verifies metadata and container transport.
+Scene anchors and sampled crops do not establish whole-film picture alignment.
 
 Hybrid-only flags:
 
@@ -185,15 +182,22 @@ Hybrid-only flags:
   Unknown DV profiles still fail; no RPU conversion mode is guessed.
 - `--max-offset <frames>`: correlation search window (default 5 minutes).
 - `--scene-threshold <f>`: ffmpeg scdet threshold (default 8.0).
-- `--grade-check <metadata|sampled|full>`: grade gate depth (default
-  `sampled`; `full` measures the entire runtime).
+- `--grade-check <metadata|sampled|full>`: mismatch-screen coverage (default
+  `sampled`). Full mode checks the aligned overlap in intervals of at most five
+  seconds and reports missing overlap; it does not certify the creative grade.
+  Reports list requested, measured and skipped intervals. Y-derived peak values
+  are brightness surrogates, not measured luminance or replacement MaxCLL.
+  U/V averages detect some chroma mismatches but cannot establish RGB equivalence.
 - `--grade-windows <n>`: sample windows for the sampled check (default 6).
 - `--skip-grade-check`: bypass the grade gate (use only when you are
   certain the grades match). Donor eligibility checks still apply.
-- `--letterbox <measured|resolution|off>`: L5 active-area handling
-  (default `measured`). Missing measurements, variable measured bars or multiple
-  donor L5 presets now stop measured mode; there is no resolution fallback.
-  `resolution` and `off` remain explicit overrides, not measured validation.
+- `--letterbox <measured|off>`: L5 active-area handling (default `measured`).
+  Measured mode requires at least three distinct usable windows, plausible
+  crops and sufficient lighting. Reports retain usable/skipped observations
+  and disagreement. Variable measured bars or multiple donor L5 presets stop
+  measured mode. Short changes between samples remain unverified.
+  `off` retains existing donor L5 after review. The old `resolution` option is
+  rejected: dimensions alone cannot distinguish scaling, padding and cropping.
 - `--delete-sources`: request input deletion; currently withheld because
   full-timeline active-picture/L5 validation remains inconclusive. Both inputs
   are retained even when this flag is supplied.

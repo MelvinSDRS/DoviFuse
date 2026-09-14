@@ -81,7 +81,7 @@ fn append_hwaccel(args: &mut Vec<OsString>, enabled: bool) {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
 pub(crate) struct SampleWindow {
     pub(crate) start_s: f64,
     pub(crate) dur_s: f64,
@@ -126,8 +126,11 @@ pub(crate) fn sample_windows(duration_s: f64, count: usize, window_s: f64) -> Ve
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FrameLuma {
+    pub(crate) frame: u64,
     pub(crate) yavg: f64,
     pub(crate) ymax: f64,
+    pub(crate) uavg: Option<f64>,
+    pub(crate) vavg: Option<f64>,
 }
 
 /// Parse `metadata=mode=print` output of the signalstats filter:
@@ -138,36 +141,60 @@ pub(crate) struct FrameLuma {
 /// ```
 pub(crate) fn parse_signalstats(output: &str) -> Vec<FrameLuma> {
     let mut frames = Vec::new();
-    let mut cur_frame: Option<u64> = None;
-    let mut yavg: Option<f64> = None;
-    let mut ymax: Option<f64> = None;
-
-    // The frame number gates the flush (a stats pair without a preceding
-    // frame: line is malformed) but is not stored - measurements are used
-    // positionally.
-    let mut flush = |frame: Option<u64>, yavg: &mut Option<f64>, ymax: &mut Option<f64>| {
-        if let (Some(_), Some(a), Some(m)) = (frame, yavg.take(), ymax.take()) {
-            frames.push(FrameLuma { yavg: a, ymax: m });
-        }
-    };
-
-    for line in output.lines() {
-        let line = line.trim();
+    let mut current: Option<FrameLuma> = None;
+    for line in output.lines().map(str::trim) {
         if let Some(rest) = line.strip_prefix("frame:") {
-            flush(cur_frame, &mut yavg, &mut ymax);
-            cur_frame = rest
+            if let Some(frame) = current.take() {
+                frames.push(frame);
+            }
+            current = rest
                 .split_whitespace()
                 .next()
-                .and_then(|v| v.parse::<u64>().ok());
-        } else if let Some(v) = line.strip_prefix("lavfi.signalstats.YAVG=") {
-            yavg = v.parse::<f64>().ok();
-        } else if let Some(v) = line.strip_prefix("lavfi.signalstats.YMAX=") {
-            ymax = v.parse::<f64>().ok();
+                .and_then(|v| v.parse().ok())
+                .map(|frame| FrameLuma {
+                    frame,
+                    yavg: f64::NAN,
+                    ymax: f64::NAN,
+                    uavg: None,
+                    vavg: None,
+                });
+        } else if let Some(frame) = &mut current {
+            if let Some(v) = line.strip_prefix("lavfi.signalstats.YAVG=") {
+                frame.yavg = v.parse().unwrap_or(f64::NAN);
+            } else if let Some(v) = line.strip_prefix("lavfi.signalstats.YMAX=") {
+                frame.ymax = v.parse().unwrap_or(f64::NAN);
+            } else if let Some(v) = line.strip_prefix("lavfi.signalstats.UAVG=") {
+                frame.uavg = v.parse().ok();
+            } else if let Some(v) = line.strip_prefix("lavfi.signalstats.VAVG=") {
+                frame.vavg = v.parse().ok();
+            }
         }
     }
-    flush(cur_frame, &mut yavg, &mut ymax);
-
+    if let Some(frame) = current {
+        frames.push(frame);
+    }
     frames
+}
+
+fn checked_signalstats(output: &str) -> AppResult<Vec<FrameLuma>> {
+    let frames = parse_signalstats(output);
+    let headers = output
+        .lines()
+        .filter(|line| line.trim().starts_with("frame:"))
+        .count();
+    if frames.len() != headers
+        || frames.iter().enumerate().any(|(index, frame)| {
+            frame.frame != index as u64
+                || [Some(frame.yavg), Some(frame.ymax), frame.uavg, frame.vavg]
+                    .into_iter()
+                    .any(|value| {
+                        value.is_none_or(|v| !v.is_finite() || !(0.0..=65535.0).contains(&v))
+                    })
+        })
+    {
+        return Err("Brightness/chroma statistics are incomplete, non-finite, or have missing frame indices".into());
+    }
+    Ok(frames)
 }
 
 /// Parse `metadata=mode=print:key=lavfi.scd.time` output of the scdet filter.
@@ -200,6 +227,29 @@ pub(crate) struct CropRect {
     pub(crate) h: u32,
     pub(crate) x: u32,
     pub(crate) y: u32,
+}
+
+/// Shared plausibility screen: legal bounds alone can describe a small lit
+/// object in a dark picture. Require at least half each axis and 40% area.
+pub(crate) fn plausible_crop(crop: &CropRect, canvas_w: u32, canvas_h: u32) -> bool {
+    if canvas_w == 0
+        || canvas_h == 0
+        || crop.w == 0
+        || crop.h == 0
+        || crop.x.checked_add(crop.w).is_none_or(|v| v > canvas_w)
+        || crop.y.checked_add(crop.h).is_none_or(|v| v > canvas_h)
+    {
+        return false;
+    }
+    let (w, h, cw, ch) = (
+        u64::from(crop.w),
+        u64::from(crop.h),
+        u64::from(canvas_w),
+        u64::from(canvas_h),
+    );
+    w * 2 >= cw
+        && h * 2 >= ch
+        && u128::from(w) * u128::from(h) * 5 >= u128::from(cw) * u128::from(ch) * 2
 }
 
 /// Parse cropdetect stderr; returns the LAST `crop=W:H:X:Y` occurrence
@@ -257,13 +307,13 @@ pub(crate) fn measure_luma_window(
     append_hwaccel(&mut args, use_videotoolbox(rt, logger, file, &filter));
     args.extend([
         OsString::from("-ss"),
-        OsString::from(format!("{:.3}", w.start_s)),
+        OsString::from(format!("{:.9}", w.start_s)),
         OsString::from("-i"),
         file.as_os_str().to_os_string(),
         OsString::from("-map"),
         OsString::from("0:v:0"),
         OsString::from("-t"),
-        OsString::from(format!("{:.3}", w.dur_s)),
+        OsString::from(format!("{:.9}", w.dur_s)),
         OsString::from("-vf"),
         OsString::from(filter),
         OsString::from("-fps_mode"),
@@ -278,7 +328,7 @@ pub(crate) fn measure_luma_window(
     ]);
 
     let (stdout, _) = run_capture_all(logger, ffmpeg, &args, false)?;
-    Ok(parse_signalstats(&stdout))
+    checked_signalstats(&stdout)
 }
 
 /// One full downscaled decode of `file`, returning frame indices of detected
@@ -374,13 +424,13 @@ pub(crate) fn cropdetect_window(
     append_hwaccel(&mut args, use_videotoolbox(rt, logger, file, &filter));
     args.extend([
         OsString::from("-ss"),
-        OsString::from(format!("{:.3}", w.start_s)),
+        OsString::from(format!("{:.9}", w.start_s)),
         OsString::from("-i"),
         file.as_os_str().to_os_string(),
         OsString::from("-map"),
         OsString::from("0:v:0"),
         OsString::from("-t"),
-        OsString::from(format!("{:.3}", w.dur_s)),
+        OsString::from(format!("{:.9}", w.dur_s)),
         OsString::from("-vf"),
         OsString::from(filter),
         OsString::from("-an"),
@@ -442,6 +492,24 @@ lavfi.signalstats.YMAX=910
         assert!((frames[0].ymax - 900.0).abs() < 1e-9);
         assert!((frames[1].yavg - 502.1).abs() < 1e-9);
         assert!((frames[1].ymax - 910.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn signalstats_rejects_missing_chroma_nonfinite_and_frame_gaps() {
+        let row = "frame:0 pts:0 pts_time:0\nlavfi.signalstats.YAVG=400\nlavfi.signalstats.YMAX=700\nlavfi.signalstats.UAVG=512\nlavfi.signalstats.VAVG=490\n";
+        let frames = checked_signalstats(row).unwrap();
+        assert_eq!(frames[0].uavg, Some(512.0));
+        for corrupt in [
+            row.replace("frame:0", "frame:1"),
+            row.replace("VAVG=490", "VAVG=NaN"),
+            row.replace("UAVG=512", "ignored=512"),
+            row.replace("YAVG=400", "YAVG=inf"),
+        ] {
+            assert!(checked_signalstats(&corrupt).is_err());
+        }
+        assert!(
+            checked_signalstats(&format!("{row}{}", row.replace("frame:0", "frame:2"))).is_err()
+        );
     }
 
     #[test]

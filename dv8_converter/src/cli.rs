@@ -91,8 +91,6 @@ pub(crate) enum GradeCheckMode {
 pub(crate) enum LetterboxMode {
     /// cropdetect the HDR target and set L5 from the measurement (default).
     Measured,
-    /// Legacy: derive L5 from the resolution difference between sources.
-    Resolution,
     /// Leave the RPU's L5 metadata untouched.
     Off,
 }
@@ -181,16 +179,15 @@ Hybrid-only options:\n\
   --scene-threshold <f>  scdet scene-change threshold (default: 8.0)\n\
   --max-offset <n>  Max frame offset searched during correlation\n\
                     (default: 5 minutes worth of frames)\n\
-  --grade-check <mode>   Brightness grade comparison: metadata (static\n\
+  --grade-check <mode>   Brightness/chroma screening: metadata (static\n\
                     only), sampled (measure windows, default), full\n\
-                    (measure the entire runtime)\n\
+                    (screen full aligned overlap in short intervals)\n\
   --skip-grade-check     Skip the grade gate entirely (mismatched grades\n\
                     will NOT abort the conversion)\n\
   --grade-windows <n>    Sample windows for the sampled grade check\n\
                     (default: 6)\n\
   --letterbox <mode>     L5 active-area handling: measured (cropdetect the\n\
-                    HDR target, default), resolution (derive from the\n\
-                    resolution difference), off (keep RPU L5 as-is)\n\
+                    HDR target, default), off (keep RPU L5 as-is)\n\
 \n\
 Examples:\n\
   DV7toDV8.sh /path/to/movie.mkv\n\
@@ -373,11 +370,11 @@ fn parse_args_from(original_args: Vec<String>) -> AppResult<CliArgs> {
                     }
                     hybrid.letterbox = match args[i].as_str() {
                         "measured" => LetterboxMode::Measured,
-                        "resolution" => LetterboxMode::Resolution,
+                        "resolution" => return Err("--letterbox resolution is unsupported: dimensions cannot distinguish scaling from padding. Use measured, or off to retain existing L5 after review.".into()),
                         "off" => LetterboxMode::Off,
                         other => {
                             return Err(format!(
-                            "Invalid --letterbox mode '{other}' (expected measured|resolution|off)"
+                            "Invalid --letterbox mode '{other}' (expected measured|off)"
                         ))
                         }
                     };
@@ -573,6 +570,15 @@ mod tests {
         assert!(repair.hybrid.allow_padding);
         assert!(parse(&["--repair-sync", "5", "--offset", "0", "movie.mkv"]).is_err());
         assert!(parse(&["--check", "--allow-padding", "movie.mkv"]).is_err());
+    }
+
+    #[test]
+    fn resolution_does_not_authorize_inferred_bars() {
+        let args = ["--hybrid", "--letterbox", "resolution", "dv.mkv", "hdr.mkv"];
+        let error = parse_args_from(args.into_iter().map(str::to_string).collect())
+            .err()
+            .unwrap();
+        assert!(error.contains("scaling"));
     }
 
     #[test]

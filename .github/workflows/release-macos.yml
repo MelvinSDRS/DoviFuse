@@ -48,6 +48,8 @@ jobs:
             /tmp/dv8-ci-fixtures/*.mkv
             /tmp/dv8-ci-fixtures/donor-eligibility/manifest.json
             /tmp/dv8-ci-fixtures/donor-eligibility/*.mkv
+            /tmp/dv8-ci-fixtures/picture-coverage/manifest.json
+            /tmp/dv8-ci-fixtures/picture-coverage/*.mkv
           if-no-files-found: error
       - name: Preserve Linux test evidence
         if: always()
@@ -75,6 +77,8 @@ jobs:
             /tmp/dv8-mapping-*/summary.json
             /tmp/dv8-temporal-*/*.log
             /tmp/dv8-temporal-*/*.json
+            /tmp/dv8-picture-coverage-*/*.log
+            /tmp/dv8-picture-coverage-*/*.json
             /tmp/dv8-mapping-*/*.report.json
 
   release:
@@ -147,6 +151,8 @@ jobs:
             /tmp/dv8-mapping-*/summary.json
             /tmp/dv8-temporal-*/*.log
             /tmp/dv8-temporal-*/*.json
+            /tmp/dv8-picture-coverage-*/*.log
+            /tmp/dv8-picture-coverage-*/*.json
             /tmp/dv8-mapping-*/*.report.json
 
       - name: Require hybrid release acceptance evidence

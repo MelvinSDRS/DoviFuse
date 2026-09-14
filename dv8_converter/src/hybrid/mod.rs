@@ -34,6 +34,28 @@ use preflight::hybrid_preflight_checks;
 use scenes::{assess_temporal_alignment, correlate_scene_cuts, export_dv_scene_cuts};
 use validate::{hybrid_get_rpu_frame_count, hybrid_validate_output, hybrid_verify_output_sync};
 
+/// Complement of measured half-open frame intervals on the target timeline.
+fn unmeasured_ranges(covered: &[(u64, u64)], frames: u64) -> Vec<(u64, u64)> {
+    let mut covered = covered.to_vec();
+    covered.sort_unstable();
+    let mut cursor = 0;
+    let mut gaps = Vec::new();
+    for (start, end) in covered {
+        let (start, end) = (start.min(frames), end.min(frames));
+        if end <= start {
+            continue;
+        }
+        if start > cursor {
+            gaps.push((cursor, start));
+        }
+        cursor = cursor.max(end);
+    }
+    if cursor < frames {
+        gaps.push((cursor, frames));
+    }
+    gaps
+}
+
 /// Correlation search window in frames: --max-offset, or 5 minutes' worth.
 fn correlation_max_offset(opts: &HybridOptions, fps: f64) -> i64 {
     opts.max_offset
@@ -514,7 +536,7 @@ fn process_hybrid_impl(
         logger.warn("Alignment repeats edge metadata; the padded pictures remain unverified");
     }
 
-    logger.step("7 | Grade check (brightness comparison)");
+    logger.step("7 | Brightness/chroma screening");
     if opts.skip_grade_check {
         logger.warn("Grade check skipped (--skip-grade-check)");
     } else if opts.grade_check == GradeCheckMode::Metadata {
@@ -532,36 +554,54 @@ fn process_hybrid_impl(
             opts.grade_check,
             opts.grade_windows,
         )?;
-        logger.measurement("grade", serde_json::json!({"mode":format!("{:?}",opts.grade_check),"windows_measured":outcome.windows_measured,"windows_bad":outcome.windows_bad,"worst_delta_pq":outcome.worst_delta_pq,"peak_ratio":outcome.peak_ratio,"pass":outcome.pass,"method":"legacy PQ brightness windows; not calibrated RGB creative-grade equivalence"}));
+        let mut screen = serde_json::to_value(&outcome).expect("brightness screen is serializable");
+        let covered: Vec<_> = outcome
+            .windows
+            .iter()
+            .filter(|window| matches!(window.status, grade::GradeWindowStatus::Measured))
+            .filter_map(|window| window.measured_target)
+            .map(|interval| (interval.start_frame, interval.end_frame))
+            .collect();
+        let gaps = unmeasured_ranges(&covered, hdr_info.frame_count);
+        screen["target_unmeasured_intervals"] = serde_json::json!(gaps
+            .iter()
+            .map(|(start, end)| serde_json::json!({"start_frame": start,"end_frame": end}))
+            .collect::<Vec<_>>());
+        screen["whole_target_screened"] = serde_json::json!(gaps.is_empty());
+        screen["target_frames_covered"] = serde_json::json!(
+            hdr_info.frame_count - gaps.iter().map(|(start, end)| end - start).sum::<u64>()
+        );
+        screen["mode"] = serde_json::json!(format!("{:?}", opts.grade_check));
+        screen["method"] = serde_json::json!("Limited-range BT.2020 PQ Y averages and U/V averages; mismatch screening, not calibrated RGB grade equivalence");
+        screen["peak_metric"] = serde_json::json!(
+            "PQ(Y) code-derived brightness surrogate, not measured luminance or MaxCLL"
+        );
+        logger.measurement("brightness_screen", screen);
+        if !gaps.is_empty() {
+            logger.warn(&format!("Brightness/chroma coverage leaves {} unmeasured target intervals; see the job report for exact frame ranges", gaps.len()));
+        }
         logger.log(&format!(
-            "Grade summary: {} windows measured, {} mismatched, worst mean |dPQ| {:.4}, p99 peak {:.0} nits (DV) vs {:.0} nits (HDR), ratio {:.2}",
-            outcome.windows_measured,
-            outcome.windows_bad,
-            outcome.worst_delta_pq,
-            outcome.p99_dv_nits,
-            outcome.p99_hdr_nits,
-            outcome.peak_ratio
+            "Brightness/chroma screen: {} of {} requested intervals measured, {} skipped, {} mismatched; worst mean |dPQ(YAVG)| {:.4}; PQ(Y) peak surrogate {:.0} (DV) vs {:.0} (HDR), ratio {:.2}. These values are not measured luminance.",
+            outcome.windows_measured, outcome.windows_requested, outcome.windows_skipped,
+            outcome.windows_bad, outcome.worst_delta_pq, outcome.p99_dv_nits,
+            outcome.p99_hdr_nits, outcome.peak_ratio
         ));
         if !outcome.pass {
             return Err(format!(
-                "Brightness comparison failed: {} of {} windows mismatched, peak ratio {:.2}. Grade compatibility has not been established; hybrid creation stopped.",
+                "Brightness/chroma screen failed: {} of {} intervals mismatched, peak surrogate ratio {:.2}. Grade compatibility has not been established; hybrid creation stopped.",
                 outcome.windows_bad, outcome.windows_measured, outcome.peak_ratio
             ));
         }
-        logger.ok("No brightness mismatch detected within the measured coverage");
+        logger.ok("No brightness/chroma mismatch detected within the measured coverage; creative-grade equivalence remains unverified");
     }
     logger.check_result("picture_grade", "Picture grade compatibility", "inconclusive",
-        "Calibrated RGB/chroma grade compatibility has not been established. Brightness or static-metadata checks alone do not verify the creative grade.");
+        "Calibrated RGB grade compatibility has not been established. Brightness, average chroma and static-metadata screens cannot verify the creative grade.");
 
     logger.step("8 | Letterbox L5 (active area)");
     let active_area = match opts.letterbox {
         LetterboxMode::Off => {
             logger.ok("Letterbox handling disabled (--letterbox off) - RPU L5 kept as-is");
             ActiveAreaChoice::Keep
-        }
-        LetterboxMode::Resolution => {
-            logger.ok("Resolution-based L5 (--letterbox resolution)");
-            ActiveAreaChoice::Resolution
         }
         LetterboxMode::Measured => {
             rt.require_ffmpeg()?;
@@ -876,6 +916,16 @@ fn process_hybrid_impl(
 #[cfg(test)]
 mod repair_tests {
     use super::*;
+
+    #[test]
+    fn screen_coverage_exposes_head_tail_and_internal_gaps_without_double_counting() {
+        assert_eq!(
+            unmeasured_ranges(&[(30, 50), (10, 40), (50, 60), (80, 150)], 100),
+            vec![(0, 10), (60, 80)]
+        );
+        assert_eq!(unmeasured_ranges(&[], 100), vec![(0, 100)]);
+        assert!(unmeasured_ranges(&[(0, 100)], 100).is_empty());
+    }
 
     #[test]
     fn repair_output_is_non_destructive_and_numbered() {

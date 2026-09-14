@@ -33,6 +33,11 @@ python3 scripts/audit_smoke.py
 python3 scripts/test_donor_eligibility.py
 python3 scripts/test_mapping_policy.py
 python3 scripts/test_temporal_alignment.py
+export DV8_PICTURE_FIXTURES="${DV8_PICTURE_FIXTURES:-$DV8_AUDIT_FIXTURES/picture-coverage}"
+if [[ ! -f "$DV8_PICTURE_FIXTURES/manifest.json" ]]; then
+  python3 scripts/test_picture_coverage.py --prepare
+fi
+python3 scripts/test_picture_coverage.py
 export DV8_TEMPORAL_LOCAL_FIXTURES="${DV8_TEMPORAL_LOCAL_FIXTURES:-$DV8_AUDIT_FIXTURES/temporal-local}"
 if [[ ! -f "$DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
   python3 scripts/test_temporal_local_edits.py --prepare "$DV8_TEMPORAL_LOCAL_FIXTURES"

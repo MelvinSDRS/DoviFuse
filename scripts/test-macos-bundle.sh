@@ -43,6 +43,7 @@ PY
 "$PYTHON" "$ROOT/scripts/test_donor_eligibility.py"
 "$PYTHON" "$ROOT/scripts/test_mapping_policy.py"
 "$PYTHON" "$ROOT/scripts/test_temporal_alignment.py"
+"$PYTHON" "$ROOT/scripts/test_picture_coverage.py"
 export DV8_TEMPORAL_LOCAL_FIXTURES="${DV8_TEMPORAL_LOCAL_FIXTURES:-$DV8_AUDIT_FIXTURES/temporal-local}"
 if [[ ! -f "$DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
   "$PYTHON" "$ROOT/scripts/test_temporal_local_edits.py" --prepare "$DV8_TEMPORAL_LOCAL_FIXTURES"

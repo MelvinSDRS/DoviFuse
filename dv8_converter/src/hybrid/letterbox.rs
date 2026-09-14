@@ -10,9 +10,13 @@ use std::fs;
 use std::path::Path;
 
 use crate::exec::{run_status, AppResult};
-use crate::ffmpeg::{cropdetect_window, SampleWindow};
+use crate::ffmpeg::{
+    cropdetect_window, measure_luma_window, plausible_crop, CropRect, FrameLuma, SampleWindow,
+};
 use crate::logger::Logger;
+use crate::pq::code_limited_to_pq;
 use crate::runtime::Runtime;
+use serde::Serialize;
 
 /// cropdetect luma threshold: PQ-encoded black bars are well below 8% code.
 const CROP_LIMIT: f64 = 0.08;
@@ -21,8 +25,124 @@ const CROP_LIMIT: f64 = 0.08;
 const VARIABLE_AR_PX: u32 = 8;
 /// Per-edge tolerance when comparing measured bars to the RPU's own L5.
 const L5_MATCH_PX: u32 = 4;
+/// A single cropdetect observation is not enough evidence to rewrite L5.
+const MIN_USABLE_WINDOWS: usize = 3;
+/// Reject windows whose active picture is effectively unlit.
+const MIN_ACTIVE_YMAX: f64 = 0.08;
+const MIN_ACTIVE_YAVG: f64 = 0.04;
+/// A single bright object or flash must not authorize an active-area edit.
+const MIN_LIT_FRAME_FRACTION: f64 = 0.50;
 
 pub(crate) use super::active_area::Bars;
+
+#[derive(Serialize)]
+struct LetterboxWindowObservation {
+    start_s: f64,
+    end_s: f64,
+    status: &'static str,
+    reason: Option<String>,
+    crop: Option<LetterboxCrop>,
+    bars: Option<Bars>,
+    frames: usize,
+    lit_frames: usize,
+    max_ymax_normalized: Option<f64>,
+    mean_yavg_normalized: Option<f64>,
+}
+
+#[derive(Serialize)]
+struct LetterboxCrop {
+    width: u32,
+    height: u32,
+    x: u32,
+    y: u32,
+}
+
+#[derive(Serialize)]
+struct LetterboxMeasurement {
+    requested_windows: usize,
+    usable_windows: usize,
+    skipped_windows: usize,
+    unattempted_windows: usize,
+    minimum_usable_windows: usize,
+    spread_px: Option<u32>,
+    bars: Option<Bars>,
+    error: Option<String>,
+    observations: Vec<LetterboxWindowObservation>,
+}
+
+fn crop_report(crop: &CropRect) -> LetterboxCrop {
+    LetterboxCrop {
+        width: crop.w,
+        height: crop.h,
+        x: crop.x,
+        y: crop.y,
+    }
+}
+
+fn brightness_summary(frames: &[FrameLuma]) -> (usize, Option<f64>, Option<f64>) {
+    if frames.is_empty() {
+        return (0, None, None);
+    }
+    let normalized = |code: f64| code_limited_to_pq(code, 10);
+    let lit_frames = frames
+        .iter()
+        .filter(|frame| normalized(frame.yavg) >= MIN_ACTIVE_YAVG)
+        .count();
+    let max_ymax = frames
+        .iter()
+        .map(|frame| normalized(frame.ymax))
+        .fold(0.0, f64::max);
+    let mean_yavg = frames
+        .iter()
+        .map(|frame| normalized(frame.yavg))
+        .sum::<f64>()
+        / frames.len() as f64;
+    (lit_frames, Some(max_ymax), Some(mean_yavg))
+}
+
+fn usable_observation(
+    crop: Option<&CropRect>,
+    frames: &[FrameLuma],
+    canvas_w: u32,
+    canvas_h: u32,
+) -> Result<(Bars, usize, Option<f64>, Option<f64>), String> {
+    let (lit_frames, max_ymax, mean_yavg) = brightness_summary(frames);
+    let Some(max_ymax_value) = max_ymax else {
+        return Err("uncropped luma measurement returned no frames".to_string());
+    };
+    let Some(mean_yavg_value) = mean_yavg else {
+        return Err("uncropped luma measurement returned no average".to_string());
+    };
+    let minimum_lit_frames =
+        ((frames.len() as f64 * MIN_LIT_FRAME_FRACTION).ceil() as usize).max(3);
+    if max_ymax_value < MIN_ACTIVE_YMAX
+        || mean_yavg_value < MIN_ACTIVE_YAVG
+        || lit_frames < minimum_lit_frames
+    {
+        return Err(format!(
+            "dark or insufficient active picture (YMAX {:.3}, YAVG {:.3}, lit {lit_frames}/{}, need {minimum_lit_frames})",
+            max_ymax_value,
+            mean_yavg_value,
+            frames.len()
+        ));
+    }
+    let Some(crop) = crop else {
+        return Err("cropdetect returned no rectangle".to_string());
+    };
+    if !plausible_crop(crop, canvas_w, canvas_h) {
+        return Err(format!(
+            "implausible crop {}x{} at {},{} for {}x{} canvas",
+            crop.w, crop.h, crop.x, crop.y, canvas_w, canvas_h
+        ));
+    }
+    let bars = bars_from_crop(crop, canvas_w, canvas_h)
+        .ok_or_else(|| "cropdetect returned a degenerate rectangle".to_string())?;
+    Ok((bars, lit_frames, max_ymax, mean_yavg))
+}
+
+fn enough_usable_windows(count: usize) -> bool {
+    count >= MIN_USABLE_WINDOWS
+}
 
 /// Convert a cropdetect rectangle into per-edge bar sizes on a canvas.
 pub(crate) fn bars_from_crop(
@@ -124,7 +244,8 @@ pub(crate) fn dv_rpu_l5_presets(
     Ok(presets)
 }
 
-/// cropdetect over the sample windows; None when nothing usable was measured.
+/// cropdetect and uncropped luma over sample windows; None when evidence is
+/// missing or thinner than the minimum three distinct usable windows.
 pub(crate) fn measure_letterbox(
     rt: &Runtime,
     logger: &Logger,
@@ -134,17 +255,145 @@ pub(crate) fn measure_letterbox(
     canvas_h: u32,
 ) -> AppResult<Option<(Bars, u32)>> {
     let mut all: Vec<Bars> = Vec::new();
+    let mut observations = Vec::with_capacity(windows.len());
+    let mut fatal_error: Option<String> = None;
     for w in windows {
-        let Some(crop) = cropdetect_window(rt, logger, file, w, CROP_LIMIT)? else {
+        let end_s = w.start_s + w.dur_s;
+        if observations
+            .iter()
+            .any(|observation: &LetterboxWindowObservation| {
+                (observation.start_s - w.start_s).abs() < 0.001
+                    && (observation.end_s - end_s).abs() < 0.001
+            })
+        {
+            observations.push(LetterboxWindowObservation {
+                start_s: w.start_s,
+                end_s,
+                status: "skipped",
+                reason: Some("duplicate sample window".to_string()),
+                crop: None,
+                bars: None,
+                frames: 0,
+                lit_frames: 0,
+                max_ymax_normalized: None,
+                mean_yavg_normalized: None,
+            });
             continue;
-        };
-        match bars_from_crop(&crop, canvas_w, canvas_h) {
-            Some(b) => all.push(b),
-            None => logger.warn(&format!(
-                "cropdetect returned a degenerate rectangle ({}x{} at {},{}) in window at {:.0}s, ignored",
-                crop.w, crop.h, crop.x, crop.y, w.start_s
-            )),
         }
+        let crop = match cropdetect_window(rt, logger, file, w, CROP_LIMIT) {
+            Ok(crop) => crop,
+            Err(error) => {
+                observations.push(LetterboxWindowObservation {
+                    start_s: w.start_s,
+                    end_s,
+                    status: "skipped",
+                    reason: Some(format!("cropdetect failed: {error}")),
+                    crop: None,
+                    bars: None,
+                    frames: 0,
+                    lit_frames: 0,
+                    max_ymax_normalized: None,
+                    mean_yavg_normalized: None,
+                });
+                fatal_error = Some(format!(
+                    "cropdetect failed in window at {:.3}s: {error}",
+                    w.start_s
+                ));
+                break;
+            }
+        };
+        let frames = match measure_luma_window(rt, logger, file, w, None) {
+            Ok(frames) => frames,
+            Err(error) => {
+                observations.push(LetterboxWindowObservation {
+                    start_s: w.start_s,
+                    end_s,
+                    status: "skipped",
+                    reason: Some(format!("uncropped luma measurement failed: {error}")),
+                    crop: crop.as_ref().map(crop_report),
+                    bars: None,
+                    frames: 0,
+                    lit_frames: 0,
+                    max_ymax_normalized: None,
+                    mean_yavg_normalized: None,
+                });
+                fatal_error = Some(format!(
+                    "uncropped luma measurement failed in window at {:.3}s: {error}",
+                    w.start_s
+                ));
+                break;
+            }
+        };
+        let crop_report_value = crop.as_ref().map(crop_report);
+        match usable_observation(crop.as_ref(), &frames, canvas_w, canvas_h) {
+            Ok((bars, lit_frames, max_ymax_normalized, mean_yavg_normalized)) => {
+                all.push(bars);
+                observations.push(LetterboxWindowObservation {
+                    start_s: w.start_s,
+                    end_s,
+                    status: "usable",
+                    reason: None,
+                    crop: crop_report_value,
+                    bars: Some(bars),
+                    frames: frames.len(),
+                    lit_frames,
+                    max_ymax_normalized,
+                    mean_yavg_normalized,
+                });
+            }
+            Err(reason) => {
+                logger.warn(&format!(
+                    "Letterbox window at {:.0}-{:.0}s skipped: {reason}",
+                    w.start_s, end_s
+                ));
+                let (lit_frames, max_ymax_normalized, mean_yavg_normalized) =
+                    brightness_summary(&frames);
+                observations.push(LetterboxWindowObservation {
+                    start_s: w.start_s,
+                    end_s,
+                    status: "skipped",
+                    reason: Some(reason),
+                    crop: crop_report_value,
+                    bars: None,
+                    frames: frames.len(),
+                    lit_frames,
+                    max_ymax_normalized,
+                    mean_yavg_normalized,
+                });
+            }
+        }
+    }
+    let aggregate = aggregate_bars(&all);
+    let (bars, spread_px) = aggregate
+        .map(|(bars, spread)| (Some(bars), Some(spread)))
+        .unwrap_or((None, None));
+    let usable_windows = all.len();
+    let skipped_windows = observations.len().saturating_sub(usable_windows);
+    let unattempted_windows = windows.len().saturating_sub(observations.len());
+    let report = LetterboxMeasurement {
+        requested_windows: windows.len(),
+        usable_windows,
+        skipped_windows,
+        unattempted_windows,
+        minimum_usable_windows: MIN_USABLE_WINDOWS,
+        spread_px,
+        bars,
+        error: fatal_error.clone(),
+        observations,
+    };
+    logger.measurement(
+        "letterbox",
+        serde_json::to_value(&report).expect("letterbox measurement is serializable"),
+    );
+    if let Some(error) = fatal_error {
+        return Err(error);
+    }
+    if !enough_usable_windows(usable_windows) {
+        logger.warn(&format!(
+            "Active-area measurement is inconclusive: {usable_windows} usable of {} requested windows (need at least {MIN_USABLE_WINDOWS})",
+            windows.len()
+        ));
+        return Ok(None);
     }
     Ok(aggregate_bars(&all))
 }
@@ -154,8 +403,6 @@ pub(crate) fn measure_letterbox(
 pub(crate) enum ActiveAreaChoice {
     /// Leave the RPU's L5 untouched.
     Keep,
-    /// Legacy: derive the offsets from the resolution difference.
-    Resolution,
     /// Reset L5 and apply these measured offsets to all frames.
     Measured(Bars),
 }
@@ -169,7 +416,7 @@ pub(crate) fn decide_active_area(
     canvas_match: bool,
 ) -> Result<(ActiveAreaChoice, Vec<(bool, String)>), String> {
     let (bars, disagreement) = measured.ok_or(
-        "Active-area measurement is inconclusive: no usable windows. No resolution fallback or source deletion is allowed.",
+        "Active-area measurement is inconclusive: insufficient usable windows. No resolution fallback or source deletion is allowed.",
     )?;
     if disagreement > VARIABLE_AR_PX {
         return Err(format!("Active-area measurement is inconclusive: sampled windows disagree by {disagreement}px. A frame-addressed timeline is required; refusing to flatten variable aspect ratios."));
@@ -196,7 +443,7 @@ pub(crate) fn decide_active_area(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffmpeg::CropRect;
+    use crate::ffmpeg::{CropRect, FrameLuma};
 
     #[test]
     fn bars_from_crop_scope_on_uhd() {
@@ -332,8 +579,118 @@ mod tests {
 
     #[test]
     fn decide_refuses_without_measurement() {
-        assert!(decide_active_area(None, &[], true)
-            .unwrap_err()
-            .contains("inconclusive"));
+        let error = decide_active_area(None, &[], false).unwrap_err();
+        assert!(error.contains("inconclusive"));
+        assert!(error.contains("No resolution fallback"));
+    }
+
+    #[test]
+    fn dark_observation_is_not_usable() {
+        let frames = vec![
+            FrameLuma {
+                frame: 0,
+                yavg: 64.0,
+                ymax: 64.0,
+                uavg: None,
+                vavg: None,
+            };
+            120
+        ];
+        let crop = CropRect {
+            w: 3840,
+            h: 1600,
+            x: 0,
+            y: 280,
+        };
+        let error = usable_observation(Some(&crop), &frames, 3840, 2160).unwrap_err();
+        assert!(error.contains("dark"));
+    }
+
+    #[test]
+    fn mostly_black_window_with_one_flash_is_not_usable() {
+        let mut frames = vec![
+            FrameLuma {
+                frame: 0,
+                yavg: 64.0,
+                ymax: 64.0,
+                uavg: None,
+                vavg: None,
+            };
+            120
+        ];
+        frames[60] = FrameLuma {
+            frame: 60,
+            yavg: 800.0,
+            ymax: 900.0,
+            uavg: None,
+            vavg: None,
+        };
+        let crop = CropRect {
+            w: 3840,
+            h: 1600,
+            x: 0,
+            y: 280,
+        };
+        let error = usable_observation(Some(&crop), &frames, 3840, 2160).unwrap_err();
+        assert!(error.contains("dark"));
+        assert!(error.contains("lit 1/120"));
+    }
+
+    #[test]
+    fn genuinely_bright_letterboxed_window_is_usable() {
+        let frames = vec![
+            FrameLuma {
+                frame: 0,
+                yavg: 500.0,
+                ymax: 850.0,
+                uavg: None,
+                vavg: None,
+            };
+            120
+        ];
+        let crop = CropRect {
+            w: 3840,
+            h: 1600,
+            x: 0,
+            y: 280,
+        };
+        let (bars, lit_frames, max_ymax, mean_yavg) =
+            usable_observation(Some(&crop), &frames, 3840, 2160).unwrap();
+        assert_eq!(bars.top, 280);
+        assert_eq!(bars.bottom, 280);
+        assert_eq!(lit_frames, 120);
+        assert!(max_ymax.unwrap() > MIN_ACTIVE_YMAX);
+        assert!(mean_yavg.unwrap() > MIN_ACTIVE_YAVG);
+    }
+
+    #[test]
+    fn implausible_crop_is_not_one_usable_window() {
+        let frames = vec![
+            FrameLuma {
+                frame: 0,
+                yavg: 500.0,
+                ymax: 900.0,
+                uavg: None,
+                vavg: None,
+            };
+            120
+        ];
+        let crop = CropRect {
+            w: 320,
+            h: 180,
+            x: 0,
+            y: 0,
+        };
+        let error = usable_observation(Some(&crop), &frames, 3840, 2160).unwrap_err();
+        assert!(error.contains("implausible"));
+        assert!(!enough_usable_windows(1));
+    }
+
+    #[test]
+    fn thin_evidence_requires_three_distinct_windows() {
+        assert!(!enough_usable_windows(0));
+        assert!(!enough_usable_windows(1));
+        assert!(!enough_usable_windows(2));
+        assert!(enough_usable_windows(3));
     }
 }

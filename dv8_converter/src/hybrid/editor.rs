@@ -104,52 +104,6 @@ fn edits_all(id: u16) -> BTreeMap<String, u16> {
     edits
 }
 
-/// Legacy fallback: derive the active area from the resolution difference
-/// between the two sources when no measurement is available.
-pub(crate) fn resolution_active_area(
-    dv_info: &HybridMediaInfo,
-    hdr_info: &HybridMediaInfo,
-) -> Option<ActiveArea> {
-    let (Some(dw), Some(dh), Some(hw), Some(hh)) = (
-        dv_info.width,
-        dv_info.height,
-        hdr_info.width,
-        hdr_info.height,
-    ) else {
-        return None;
-    };
-
-    if dw == hw && dh == hh {
-        return None;
-    }
-
-    let target_bigger_or_equal = hw >= dw && hh >= dh;
-
-    if target_bigger_or_equal {
-        // Target canvas is larger: the picture sits centered inside it, so
-        // the L5 offsets are half the canvas delta on each axis.
-        let bars = Bars {
-            left: (hw - dw) / 2,
-            right: (hw - dw) / 2,
-            top: (hh - dh) / 2,
-            bottom: (hh - dh) / 2,
-        };
-        return Some(ActiveArea {
-            crop: false,
-            presets: Some(vec![preset_from_bars(1, &bars)]),
-            edits: Some(edits_all(1)),
-        });
-    }
-
-    // Target smaller or mixed: zero out L5 so stale source offsets don't
-    // misplace the active area on the new canvas.
-    Some(ActiveArea {
-        crop: true,
-        presets: None,
-        edits: None,
-    })
-}
-
 /// Assemble the full editor config. Pure — snapshot-tested below.
 pub(crate) fn build_editor_config(
     strategy: &AlignmentStrategy,
@@ -184,7 +138,6 @@ pub(crate) fn build_editor_config(
 
     let active_area = match active_area {
         ActiveAreaChoice::Keep => None,
-        ActiveAreaChoice::Resolution => resolution_active_area(dv_info, hdr_info),
         ActiveAreaChoice::Measured(b) => Some(ActiveArea {
             crop: true,
             presets: Some(vec![preset_from_bars(1, b)]),
@@ -428,52 +381,15 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_resolution_target_bigger() {
+    fn canvas_upscale_keeps_existing_l5_without_resolution_guess() {
         let c = build_editor_config(
             &strategy(&[], &[]),
             MappingPolicy::Profile7Compatibility,
             &info(3840, 1608),
             &info(3840, 2160),
-            &ActiveAreaChoice::Resolution,
+            &ActiveAreaChoice::Keep,
         );
-        assert_eq!(
-            render(&c),
-            r#"{
-  "mode": 2,
-  "remove_cmv4": false,
-  "remove_mapping": false,
-  "active_area": {
-    "crop": false,
-    "presets": [
-      {
-        "id": 1,
-        "left": 0,
-        "right": 0,
-        "top": 276,
-        "bottom": 276
-      }
-    ],
-    "edits": {
-      "all": 1
-    }
-  }
-}"#
-        );
-    }
-
-    #[test]
-    fn resolution_target_smaller_crops_only() {
-        let aa = resolution_active_area(&info(3840, 2160), &info(1920, 1080)).unwrap();
-        assert!(aa.crop);
-        assert!(aa.presets.is_none());
-        assert!(aa.edits.is_none());
-    }
-
-    #[test]
-    fn resolution_same_canvas_none() {
-        assert!(resolution_active_area(&info(3840, 2160), &info(3840, 2160)).is_none());
-        let missing = HybridMediaInfo::default();
-        assert!(resolution_active_area(&missing, &info(3840, 2160)).is_none());
+        assert!(c.active_area.is_none());
     }
 
     #[test]
