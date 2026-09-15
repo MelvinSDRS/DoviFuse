@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the independent macOS bundle audits with bounded concurrency.
+"""Run independent platform audits with bounded concurrency.
 
 Every audit already creates its own disposable work directory.  This runner
 keeps those boundaries explicit by giving each process its own replay manifest
@@ -36,8 +36,40 @@ class Task:
     expected_replays: int = 0
 
 
-def build_tasks(fixtures: Path, environment: dict[str, str]) -> list[Task]:
-    """Return every bundled audit, including optional SMB coverage."""
+def build_tasks(
+    fixtures: Path, environment: dict[str, str], platform: str = "macos"
+) -> list[Task]:
+    """Return every audit for ``platform``, including optional macOS SMB coverage."""
+
+    if platform == "linux":
+        # Keep this list aligned with the former serial section of
+        # test-linux.sh.  The fixture preparation remains in the shell wrapper;
+        # only the independent, read-only audits run concurrently here.
+        return [
+            Task("reference-catalog", "verify_reference_catalog.py"),
+            Task("audit-smoke", "audit_smoke.py", expected_replays=20),
+            Task("donor-eligibility", "test_donor_eligibility.py"),
+            Task("mapping-policy", "test_mapping_policy.py"),
+            Task("metadata-transport", "test_metadata_transport.py"),
+            Task("temporal-alignment", "test_temporal_alignment.py"),
+            Task("picture-coverage", "test_picture_coverage.py"),
+            Task("p2-reuse", "test_p2_reuse.py"),
+            Task(
+                "temporal-local-edits",
+                "test_temporal_local_edits.py",
+                ("--fixtures", str(fixtures / "temporal-local")),
+            ),
+            Task("p5-disabled", "test_p5_disabled.py", expected_replays=6),
+            Task("standard-source", "audit_standard_source.py"),
+            Task("job-report", "test_job_report.py"),
+            Task("faults", "audit_faults.py", expected_replays=18),
+            Task("preservation", "audit_preservation.py"),
+            Task("l5", "audit_l5.py"),
+            Task("wrapper-smoke", "audit_wrapper_smoke.py"),
+        ]
+
+    if platform != "macos":
+        raise ValueError(f"unsupported audit platform: {platform}")
 
     tasks = [
         # These expected replay counts are part of the app-state coverage
@@ -76,29 +108,51 @@ def build_tasks(fixtures: Path, environment: dict[str, str]) -> list[Task]:
     return tasks
 
 
-def build_lanes(tasks: list[Task]) -> list[list[Task]]:
-    """Partition the audits so the longest independent controls start first.
+def build_lanes(tasks: list[Task], platform: str = "macos") -> list[list[Task]]:
+    """Partition independent audits into four bounded, duration-balanced lanes.
 
-    The lane totals are based on the recorded CI timings (roughly 159s,
-    148s, 156s, and 164s before optional SMB coverage).  Each lane still runs
-    its tasks as separate processes, preserving per-task exit codes, logs, and
-    replay manifests while avoiding a long audit being scheduled at the tail
-    of a FIFO queue.
+    Each lane still runs its tasks as separate processes, preserving per-task
+    exit codes, logs, and replay manifests.  Layouts are platform-specific
+    because Linux has a few catalog/wrapper checks while macOS has native
+    storage and optional SMB checks.
     """
 
-    layout = [
-        ("preservation", "metadata-transport", "job-report"),
-        ("faults", "picture-coverage"),
-        ("audit-smoke", "l5", "temporal-alignment", "p5-disabled"),
-        (
-            "temporal-local-edits",
-            "donor-eligibility",
-            "native-storage",
-            "mapping-policy",
-            "standard-source",
-            "p2-reuse",
-        ),
-    ]
+    if platform == "linux":
+        # Based on the serial timings: the four lane totals are approximately
+        # 85s, 92s, 86s, and 70s on the reference runner.  The longest tests
+        # start immediately and no lane shares a fixture output directory.
+        layout = [
+            ("faults", "l5", "p5-disabled"),
+            ("temporal-local-edits", "metadata-transport"),
+            ("picture-coverage", "preservation", "mapping-policy", "p2-reuse"),
+            (
+                "audit-smoke",
+                "temporal-alignment",
+                "donor-eligibility",
+                "standard-source",
+                "job-report",
+                "reference-catalog",
+                "wrapper-smoke",
+            ),
+        ]
+        optional_tasks: set[str] = set()
+    elif platform == "macos":
+        layout = [
+            ("preservation", "metadata-transport", "job-report"),
+            ("faults", "picture-coverage"),
+            ("audit-smoke", "l5", "temporal-alignment", "p5-disabled"),
+            (
+                "temporal-local-edits",
+                "donor-eligibility",
+                "native-storage",
+                "mapping-policy",
+                "standard-source",
+                "p2-reuse",
+            ),
+        ]
+        optional_tasks = {"smb"}
+    else:
+        raise ValueError(f"unsupported audit platform: {platform}")
     by_name = {task.name: task for task in tasks}
     lanes: list[list[Task]] = []
     assigned: set[str] = set()
@@ -110,14 +164,14 @@ def build_lanes(tasks: list[Task]) -> list[list[Task]]:
     # Optional controls belong to the last lane.  Failing loudly here keeps a
     # future audit from silently disappearing from the bounded runner.
     if unassigned:
-        if len(lanes) != 4 or {task.name for task in unassigned} != {"smb"}:
+        if len(lanes) != 4 or {task.name for task in unassigned} != optional_tasks:
             raise RuntimeError(
-                "macOS bundle runner lane layout is missing an explicit task assignment: "
+                f"{platform} audit runner lane layout is missing an explicit task assignment: "
                 + ", ".join(task.name for task in unassigned)
             )
         lanes[-1].extend(unassigned)
     if {task.name for lane in lanes for task in lane} != set(by_name):
-        raise RuntimeError("macOS bundle runner lane layout is incomplete")
+        raise RuntimeError(f"{platform} audit runner lane layout is incomplete")
     return lanes
 
 
@@ -267,7 +321,7 @@ def run_tasks(
                 }
                 results.append(result)
                 print(
-                    f"macOS bundle audit finished: {task.name} "
+                    f"audit finished: {task.name} "
                     f"exit={code} duration={result['duration_seconds']}s",
                     flush=True,
                 )
@@ -336,6 +390,7 @@ def main() -> int:
     parser.add_argument("fixtures", type=Path)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+    parser.add_argument("--platform", choices=("macos", "linux"), default="macos")
     options = parser.parse_args()
     if options.workers < 1 or options.workers > MAX_WORKERS:
         parser.error(f"--workers must be between 1 and {MAX_WORKERS}")
@@ -343,12 +398,13 @@ def main() -> int:
     run_dir = options.run_dir.resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
+    l5_build = "release" if options.platform == "macos" else "debug"
     environment.setdefault(
         "DOVIFUSE_L5_TIMELINE_BIN",
-        str(ROOT / "dovifuse_converter" / "target" / "release" / "examples" / "l5_timeline"),
+        str(ROOT / "dovifuse_converter" / "target" / l5_build / "examples" / "l5_timeline"),
     )
-    tasks = build_tasks(fixtures, environment)
-    lanes = build_lanes(tasks)
+    tasks = build_tasks(fixtures, environment, options.platform)
+    lanes = build_lanes(tasks, options.platform)
     lane_by_name = {
         task.name: lane_index + 1
         for lane_index, lane in enumerate(lanes)
@@ -357,6 +413,7 @@ def main() -> int:
     write_json(
         run_dir / "tasks.json",
         {
+            "platform": options.platform,
             "workers": options.workers,
             "lanes": [
                 {
@@ -379,7 +436,7 @@ def main() -> int:
     )
     started = time.monotonic()
     print(
-        f"Starting {len(tasks)} independent macOS bundle audits with "
+        f"Starting {len(tasks)} independent {options.platform} audits with "
         f"{options.workers} workers; evidence: {run_dir}",
         flush=True,
     )
@@ -400,6 +457,7 @@ def main() -> int:
         )
     summary = {
         "schema_version": 1,
+        "platform": options.platform,
         "workers": options.workers,
         "task_count": len(tasks),
         "duration_seconds": round(time.monotonic() - started, 3),
@@ -413,7 +471,7 @@ def main() -> int:
     }
     write_json(run_dir / "summary.json", summary)
     print(
-        f"macOS bundle audit summary: tasks={len(tasks)} "
+        f"{options.platform} audit summary: tasks={len(tasks)} "
         f"replays={len(aggregate)} duration={summary['duration_seconds']}s "
         f"failures={len(failures)} manifest_errors={len(manifest_errors)}",
         flush=True,

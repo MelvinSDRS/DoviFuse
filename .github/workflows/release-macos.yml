@@ -136,6 +136,8 @@ jobs:
         with:
           name: linux-regression-evidence
           path: |
+            /tmp/dovifuse-audit-linux-bundle*/*.json
+            /tmp/dovifuse-audit-linux-bundle*/*.log
             /tmp/dovifuse-audit-*/*.log
             /tmp/dovifuse-audit-*/summary.json
             /tmp/dovifuse-audit-*/*.report.json

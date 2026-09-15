@@ -28,6 +28,49 @@ class MacOSBundleGroupTests(unittest.TestCase):
         self.assertIn("smb", [task.name for task in lanes[-1]])
         self.assertEqual(sum(len(lane) for lane in lanes), len(tasks))
 
+    def test_linux_audits_keep_serial_coverage_and_replay_contract(self):
+        tasks = build_tasks(Path("/tmp/fixtures"), {}, platform="linux")
+        names = {task.name for task in tasks}
+        self.assertEqual(
+            names,
+            {
+                "reference-catalog",
+                "audit-smoke",
+                "donor-eligibility",
+                "mapping-policy",
+                "metadata-transport",
+                "temporal-alignment",
+                "picture-coverage",
+                "p2-reuse",
+                "temporal-local-edits",
+                "p5-disabled",
+                "standard-source",
+                "job-report",
+                "faults",
+                "preservation",
+                "l5",
+                "wrapper-smoke",
+            },
+        )
+        self.assertNotIn("native-storage", names)
+        self.assertNotIn("smb", names)
+        self.assertEqual(sum(task.expected_replays for task in tasks), 44)
+        temporal = next(task for task in tasks if task.name == "temporal-local-edits")
+        self.assertEqual(temporal.args, ("--fixtures", "/tmp/fixtures/temporal-local"))
+
+    def test_linux_audits_are_assigned_to_four_bounded_lanes(self):
+        tasks = build_tasks(Path("/tmp/fixtures"), {}, platform="linux")
+        lanes = build_lanes(tasks, platform="linux")
+        self.assertEqual(len(lanes), 4)
+        self.assertEqual(
+            {task.name for lane in lanes for task in lane},
+            {task.name for task in tasks},
+        )
+        self.assertEqual(
+            len([task.name for lane in lanes for task in lane]),
+            len({task.name for lane in lanes for task in lane}),
+        )
+
     def test_failure_exit_is_recorded_and_later_lane_task_still_runs(self):
         with tempfile.TemporaryDirectory(prefix="dovifuse-runner-test-") as directory:
             run_dir = Path(directory)
