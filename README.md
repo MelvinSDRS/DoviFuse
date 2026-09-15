@@ -6,6 +6,8 @@ material to Profile 8, and building Profile 8 hybrids by pairing DV metadata
 with an HDR10 base. It combines a Rust conversion engine, a native macOS app,
 and automation for repeatable conversion and inspection.
 
+![DV8 Maker macOS app showing the Hybrid conversion screen](docs/images/dv8-maker-hybrid.png)
+
 **Status: experimental.** This personal project shares the implementation and
 engineering approach. Automated checks cover conversion mechanics and failure
 handling; full-length playback acceptance remains pending.
