@@ -136,6 +136,12 @@ class ReleaseSourceMechanicsTests(unittest.TestCase):
             with self.assertRaisesRegex(package.SourceBundleError, "Unsafe or private"):
                 package._validate_tar(archive_path, "fixture")
 
+    def test_upstream_private_implementation_headers_are_allowed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="dv8-release-source-test-") as raw:
+            archive_path = Path(raw) / "upstream.tar.xz"
+            source_tar(archive_path, "mkvtoolnix-100.0", "src/common/private/dts_parser.h")
+            package._validate_tar(archive_path, "upstream", "mkvtoolnix-100.0")
+
 
 if __name__ == "__main__":
     unittest.main()

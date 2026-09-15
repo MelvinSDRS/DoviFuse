@@ -111,7 +111,9 @@ def _unsafe_archive_member(name: str) -> bool:
     parts = set(path.parts)
     if ".git" in parts or ".macos-build-cache" in parts or ".verification" in parts:
         return True
-    if any(part in {"logs", "private", "secrets"} for part in path.parts):
+    # Upstream C++ projects legitimately use directories named "private" for
+    # implementation headers (including the pinned MKVToolNix source archive).
+    if any(part in {"logs", "secrets"} for part in path.parts):
         return True
     if path.name in {
         ".env",
