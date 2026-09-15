@@ -101,9 +101,24 @@ jobs:
             /tmp/dovifuse-reuse-*/report.json
             /tmp/dovifuse-mapping-*/*.report.json
 
+  macos-rendering:
+    name: macOS animation regression
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify animation advances without hover
+        run: |
+          xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
+            macapp/DoviFuse/ProcessingMotion.swift \
+            macapp/DoviFuse/ProcessingRibbons.swift \
+            macapp/DoviFuse/OrganicProcessingField.swift \
+            macapp/Tests/ProcessingTimelineRenderingTests.swift -o /tmp/dovifuse-animation-test
+          /tmp/dovifuse-animation-test
+
   macos:
     name: Build, test and package Apple Silicon app
-    needs: linux
+    needs: [linux, macos-rendering]
     runs-on: macos-15
     timeout-minutes: 120
 
@@ -124,17 +139,38 @@ jobs:
           name: synthetic-mechanics-fixtures
           path: /tmp/dovifuse-ci-fixtures
 
-      - name: Cache native build toolchain
-        uses: actions/cache@v4
+      - name: Restore native build dependencies
+        id: native-cache
+        uses: actions/cache/restore@v4
         with:
-          path: .macos-build-cache
-          key: dovifuse-macos-arm64-${{ hashFiles('macapp/build-macos-app.sh', 'dovifuse_converter/Cargo.lock', 'dovi_tool/Cargo.lock') }}
+          path: |
+            .macos-build-cache/cargo
+            .macos-build-cache/rustup
+            .macos-build-cache/downloads
+            .macos-build-cache/stage
+            .macos-build-cache/ffmpeg-*
+            dovi_tool/target
+          key: dovifuse-macos-deps-v2-${{ hashFiles('macapp/build-macos-app.sh', 'dovifuse_converter/Cargo.lock', 'dovi_tool/Cargo.lock') }}
           restore-keys: |
-            dovifuse-macos-arm64-
+            dovifuse-macos-deps-v2-
 
       - name: Build self-contained app
         run: |
           DEVELOPER_DIR="$(xcode-select -p)" ./macapp/build-macos-app.sh
+
+      # Preserve a successful dependency build even if a later regression fails.
+      - name: Save native build dependencies
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .macos-build-cache/cargo
+            .macos-build-cache/rustup
+            .macos-build-cache/downloads
+            .macos-build-cache/stage
+            .macos-build-cache/ffmpeg-*
+            dovi_tool/target
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Test packaged tools and app state
         run: |

@@ -14,33 +14,38 @@ struct ProcessingTimelineRenderingTests {
         // The scenePhase environment does not activate an AppKit process. Keep
         // TimelineView's animation clock live on headless CI runners.
         _ = NSApp.setActivationPolicy(.accessory)
+        NSApp.finishLaunching()
         NSApp.activate(ignoringOtherApps: true)
 
         let rootView = OrganicProcessingField(mode: .hybrid, progress: 0.54, active: true)
             .environment(\.scenePhase, .active)
             .frame(width: 760, height: 360)
         let hosting = NSHostingView(rootView: rootView)
-        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 760, height: 360),
+        // Keep the hosting view onscreen: macOS 15 can suspend TimelineView's
+        // animation schedule for a window placed outside every display.
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 760, height: 360),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         // The assertion must remain independent of pointer or hover events.
         window.ignoresMouseEvents = true
         window.contentView = hosting
         hosting.frame = NSRect(x: 0, y: 0, width: 760, height: 360)
-        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         hosting.layoutSubtreeIfNeeded()
 
-        // Give TimelineView its initial frame, then sample again without
-        // hover, pointer, layout, or model-progress events.
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.15))
+        // Let AppKit and TimelineView establish their initial frame, then
+        // sample again after a bounded period without hover, pointer, or model events.
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.50))
         let first = try snapshot(of: hosting)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.30))
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.50))
         let second = try snapshot(of: hosting)
+        let diagnostics = "appActive=\(NSApp.isActive), windowVisible=\(window.isVisible), "
+            + "screenCount=\(NSScreen.screens.count), reduceMotion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)"
         window.close()
 
         precondition(first != second,
-                     "TimelineView/Canvas did not render a new frame without hover input")
+                     "TimelineView/Canvas did not render a new frame without hover input (\(diagnostics))")
         print("Passed: processing canvas advances without hover input")
     }
 
