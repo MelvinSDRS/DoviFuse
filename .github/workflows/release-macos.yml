@@ -109,6 +109,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify animation advances without hover
         run: |
+          # Hosted macOS enables Reduce Motion; this test exercises motion.
+          defaults write com.apple.universalaccess reduceMotion -bool false
           xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
             macapp/DoviFuse/ProcessingMotion.swift \
             macapp/DoviFuse/ProcessingRibbons.swift \
@@ -174,6 +176,7 @@ jobs:
 
       - name: Test packaged tools and app state
         run: |
+          defaults write com.apple.universalaccess reduceMotion -bool false
           export DEVELOPER_DIR="$(xcode-select -p)"
           ./scripts/test-macos-bundle.sh "dist/DoviFuse.app" /tmp/dovifuse-ci-fixtures
 
