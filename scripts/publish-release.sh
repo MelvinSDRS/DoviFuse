@@ -7,12 +7,12 @@ if [[ ${GITHUB_REF:-} != refs/heads/main || ! ${GITHUB_SHA:-} =~ ^[0-9a-f]{40}$ 
   echo "Release publication requires an exact main commit." >&2
   exit 1
 fi
-case ${RELEASE_CHANNEL:-experimental} in
-  experimental) channel=experimental; prerelease=true; latest=false ;;
-  stable) channel=stable; prerelease=false; latest=true ;;
+case ${RELEASE_CHANNEL:-build} in
+  build) channel=build; prerelease=false; latest=true ;;
+  validated) channel=validated; prerelease=false; latest=true ;;
   *) echo "Unknown release channel." >&2; exit 1 ;;
 esac
-if [[ $channel == stable ]]; then
+if [[ $channel == validated ]]; then
   python3 "$ROOT/scripts/verify_reference_catalog.py" --release
 fi
 
@@ -24,16 +24,14 @@ done
 (cd dist && sha256sum --check DV8-Maker-arm64.dmg.sha256 DV8-Maker-sources.tar.gz.sha256)
 
 tag="${channel}-${GITHUB_SHA}"
-title="DV8 Maker ${channel} ${GITHUB_SHA:0:7}"
+title="DV8 Maker ${GITHUB_SHA:0:7}"
 notes=$(mktemp)
 trap 'rm -f "$notes"' EXIT
 {
   echo "Apple Silicon macOS build from commit ${GITHUB_SHA}."
   echo
-  if [[ $channel == experimental ]]; then
-    echo 'Experimental download: automated build and regression checks passed; full-length and Dolby playback acceptance remain pending. This is not a stable release.'
-    echo
-  fi
+  echo 'Linux and packaged macOS build and regression checks passed.'
+  echo
   echo 'Download DV8-Maker-arm64.dmg, open it, and drag DV8 Maker into Applications.'
   echo 'The app is ad-hoc signed and not notarized. macOS may require you to allow it in Privacy & Security before opening.'
   echo

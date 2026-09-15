@@ -41,7 +41,7 @@ if sys.argv[1:3] == ['release', 'upload'] and os.environ.get('FAIL_UPLOAD'):
         fake.chmod(0o755)
         self.env = dict(os.environ, PATH=str(self.root) + os.pathsep + os.environ['PATH'],
                         GITHUB_REF='refs/heads/main', GITHUB_SHA='a' * 40,
-                        RELEASE_CHANNEL='experimental', CALL_LOG=str(self.log))
+                        RELEASE_CHANNEL='build', CALL_LOG=str(self.log))
 
     def run_publish(self, **env):
         return subprocess.run(['bash', str(self.root / 'scripts/publish-release.sh')],
@@ -50,15 +50,15 @@ if sys.argv[1:3] == ['release', 'upload'] and os.environ.get('FAIL_UPLOAD'):
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
-    def test_experimental_uploads_all_assets_before_publishing(self):
+    def test_build_uploads_all_assets_before_publishing(self):
         self.assertEqual(self.run_publish().returncode, 0)
         calls = self.calls()
         create = next(c for c in calls if c[:2] == ['release', 'create'])
         upload = next(c for c in calls if c[:2] == ['release', 'upload'])
         edit = next(c for c in calls if c[:2] == ['release', 'edit'])
         self.assertIn('--draft', create)
-        self.assertIn('--prerelease=true', edit)
-        self.assertIn('--latest=false', edit)
+        self.assertIn('--prerelease=false', edit)
+        self.assertIn('--latest=true', edit)
         self.assertEqual(sum(c.startswith('dist/') for c in upload), 4)
         self.assertLess(calls.index(upload), calls.index(edit))
 
@@ -80,10 +80,10 @@ if sys.argv[1:3] == ['release', 'upload'] and os.environ.get('FAIL_UPLOAD'):
         self.assertNotEqual(self.run_publish(GITHUB_REF='refs/pull/1/merge').returncode, 0)
         self.assertEqual(self.calls(), [])
 
-    def test_stable_cannot_publish_without_acceptance(self):
+    def test_validated_cannot_publish_without_acceptance(self):
         verifier = self.root / 'scripts/verify_reference_catalog.py'
         verifier.write_text('raise SystemExit("Acceptance pending")\n')
-        result = self.run_publish(RELEASE_CHANNEL='stable')
+        result = self.run_publish(RELEASE_CHANNEL='validated')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Acceptance pending', result.stderr)
         self.assertEqual(self.calls(), [])

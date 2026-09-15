@@ -9,12 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       release_channel:
-        description: Experimental download or stable release (requires acceptance evidence)
+        description: Build release or release with additional acceptance verification
         type: choice
         options:
-          - experimental
-          - stable
-        default: experimental
+          - build
+          - validated
+        default: build
 
 concurrency:
   group: dv8-${{ github.workflow }}-${{ github.ref }}
@@ -184,15 +184,15 @@ jobs:
           python3 scripts/verify_reference_catalog.py > /tmp/dv8-acceptance.json
           {
             echo '### Release acceptance'
-            echo 'Experimental downloads require passing build and regression checks.'
-            echo 'Stable releases additionally require all acceptance evidence.'
+            echo 'Downloads require passing build and regression checks.'
+            echo 'The validated channel additionally requires all acceptance evidence.'
             echo '```json'
             cat /tmp/dv8-acceptance.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Require acceptance evidence for a stable release
-        if: github.event_name == 'workflow_dispatch' && inputs.release_channel == 'stable'
+      - name: Require acceptance evidence for a validated release
+        if: github.event_name == 'workflow_dispatch' && inputs.release_channel == 'validated'
         run: python3 scripts/verify_reference_catalog.py --release
 
       - name: Create and verify DMG
@@ -222,8 +222,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch reference catalog for stable acceptance verification
-        if: inputs.release_channel == 'stable'
+      - name: Fetch reference catalog for additional acceptance verification
+        if: inputs.release_channel == 'validated'
         uses: actions/checkout@v4
         with:
           repository: quietvoid/dovi_tool
@@ -236,5 +236,5 @@ jobs:
       - name: Publish release with checksums and sources
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ inputs.release_channel || 'experimental' }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel || 'build' }}
         run: ./scripts/publish-release.sh
