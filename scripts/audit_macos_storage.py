@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 
 from audit_fixtures import sha256
 
@@ -82,7 +83,14 @@ try:
                'partial_archive_removed': True, 'production_volumes_modified': False}
 finally:
     if attached:
-        run(['hdiutil', 'detach', mount], 'detach').check_returncode()
+        # Disk Arbitration can briefly retain the test volume after I/O ends.
+        # Retry only EBUSY; preserve every attempt and fail on persistent errors.
+        for attempt in range(5):
+            detached = run(['hdiutil', 'detach', mount], f'detach-{attempt + 1}')
+            if detached.returncode != errno.EBUSY or attempt == 4:
+                detached.check_returncode()
+                break
+            time.sleep(0.25 * (attempt + 1))
 
 (WORK/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
 if os.environ.get('DOVIFUSE_APP_REPLAY_MANIFEST'):
