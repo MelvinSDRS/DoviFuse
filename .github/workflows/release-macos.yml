@@ -223,9 +223,37 @@ jobs:
           restore-keys: |
             dovifuse-macos-deps-v2-
 
+      - name: Identify native compiler
+        id: compiler
+        run: echo "fingerprint=$(xcodebuild -version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app built from identical inputs
+        id: app-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            dist/DoviFuse.app
+            dovifuse_converter/target/release/examples/l5_timeline
+          key: dovifuse-app-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiler.outputs.fingerprint }}-${{ env.DOVI_TOOL_REV }}-${{ hashFiles('macapp/DoviFuse/**', 'macapp/DoviFuse.xcodeproj/**', 'macapp/build-macos-app.sh', 'macapp/bundle-rust-licenses.py', 'macapp/wrappers/**', 'dovifuse_converter/src/**', 'dovifuse_converter/examples/**', 'dovifuse_converter/Cargo.*', 'dovifuse_converter/build.rs', '.cargo/**', 'dovifuse_converter/.cargo/**', 'config/dovifuse.json', 'LICENSE') }}
+
       - name: Build self-contained app
+        if: steps.app-cache.outputs.cache-hit != 'true' || steps.native-cache.outputs.cache-hit != 'true'
         run: |
           DEVELOPER_DIR="$(xcode-select -p)" ./macapp/build-macos-app.sh
+
+      - name: Verify app and timeline tool
+        run: |
+          codesign --verify --deep --strict dist/DoviFuse.app
+          test -x dovifuse_converter/target/release/examples/l5_timeline
+
+      - name: Save app built from identical inputs
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            dist/DoviFuse.app
+            dovifuse_converter/target/release/examples/l5_timeline
+          key: ${{ steps.app-cache.outputs.cache-primary-key }}
 
       # Preserve a successful dependency build even if a later regression fails.
       - name: Save native build dependencies
