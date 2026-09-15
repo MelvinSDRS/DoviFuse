@@ -67,7 +67,5 @@ is bound to the checked file's path, size, inode, device, mtime and ctime. Chang
 or replacing the input requires another check. These identities are filesystem
 observations, not content hashes.
 
-The bundle identifier remains `com.melvinsiadous.DV8Maker` so existing macOS
-preferences and security-scoped bookmarks continue to work after the rename.
-On first launch, an existing `Application Support/DV8 Maker` directory is moved
-to the new DoviFuse location so saved reports remain available.
+The bundle identifier is `com.melvinsiadous.DoviFuse`. Reports and logs use
+`Application Support/DoviFuse`.

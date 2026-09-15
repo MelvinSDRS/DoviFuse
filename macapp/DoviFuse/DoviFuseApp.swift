@@ -4,10 +4,6 @@ import SwiftUI
 struct DoviFuseApp: App {
     @StateObject private var model = AppModel()
 
-    init() {
-        AppModel.migrateLegacySupportDirectory()
-    }
-
     var body: some Scene {
         WindowGroup("DoviFuse") {
             ContentView(model: model)

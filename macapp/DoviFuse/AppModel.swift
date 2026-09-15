@@ -359,22 +359,6 @@ final class AppModel: ObservableObject {
         } catch { errorMessage = "Could not start operation: \(error.localizedDescription)" }
     }
 
-    static func migrateLegacySupportDirectory(applicationSupport: URL? = nil) {
-        let fileManager = FileManager.default
-        guard let applicationSupport = applicationSupport ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return
-        }
-        let legacy = applicationSupport.appendingPathComponent("DV8 Maker", isDirectory: true)
-        let current = applicationSupport.appendingPathComponent("DoviFuse", isDirectory: true)
-        guard fileManager.fileExists(atPath: legacy.path), !fileManager.fileExists(atPath: current.path) else {
-            return
-        }
-        // Keep existing reports and logs available after the display-name rename.
-        // If the move fails, the old directory remains intact and new runs use the
-        // new location.
-        try? fileManager.moveItem(at: legacy, to: current)
-    }
-
     func cancel() {
         guard let process, process.isRunning else { return }
         phase = "Cancelling…"

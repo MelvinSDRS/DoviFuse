@@ -9,8 +9,8 @@ import time
 
 root=Path(__file__).resolve().parents[1]
 work=Path(tempfile.mkdtemp(prefix='dovifuse-wrapper-audit-'))
-for rc, legacy in ((1, False), (0, False), (1, True), (0, True)):
-    case=work/f'{rc}-{legacy}';case.mkdir()
+for rc in (1, 0):
+    case=work/str(rc);case.mkdir()
     tools=case/'tools';tools.mkdir()
     target=case/'movie.mkv';target.write_text('untouched')
     marker=case/'curl-calls'
@@ -26,9 +26,6 @@ for rc, legacy in ((1, False), (0, False), (1, True), (0, True)):
              DOVIFUSE_MEDIA_ROOTS=str(case/'no-media'),DOVIFUSE_QBT_REMOVE_CONVERTED='true',
              DOVIFUSE_AUTORUN_DRY_RUN='false',DOVIFUSE_TELEGRAM_BOT_TOKEN='',DOVIFUSE_TELEGRAM_CHAT_ID='',
              DOVIFUSE_EL_RPU_DIR=str(case/'archive'),DOVIFUSE_QBT_API_URL='http://fake.invalid')
-    if legacy:
-        env = {(key.replace('DOVIFUSE_', 'DV8_', 1) if key.startswith('DOVIFUSE_') else key): value
-               for key, value in env.items()}
     subprocess.run(['bash',str(root/'qbt_autorun_wrapper.sh'),str(target)],env=env,check=True,capture_output=True)
     deadline=time.monotonic()+10
     while time.monotonic()<deadline:

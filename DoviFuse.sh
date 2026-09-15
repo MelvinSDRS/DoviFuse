@@ -3,7 +3,7 @@ set -o pipefail
 
 rawDir="$(cd -- "$(dirname -- "$0")" &>/dev/null && pwd)"
 scriptDir="$(realpath "$rawDir")"
-envFile="${DOVIFUSE_ENV_FILE-${DV8_ENV_FILE:-$scriptDir/.env}}"
+envFile="${DOVIFUSE_ENV_FILE-$scriptDir/.env}"
 if [[ -f "$envFile" ]]; then
   set -a
   # shellcheck disable=SC1090
@@ -26,12 +26,7 @@ run_converter_bin() {
   [[ -x "$bin" ]] || return 1
 
   (
-    # Older externally configured binaries still understand the legacy names.
-    for key in ${!DOVIFUSE_@}; do
-      legacy_key="DV8_${key#DOVIFUSE_}"
-      export "$legacy_key=${!key}"
-    done
-    exec env DOVIFUSE_SCRIPT_DIR="$scriptDir" DV8_SCRIPT_DIR="$scriptDir" "$bin" "$@"
+    exec env DOVIFUSE_SCRIPT_DIR="$scriptDir" "$bin" "$@"
   )
   local rc=$?
   if (( rc == 126 || rc == 127 )); then
@@ -44,7 +39,7 @@ run_converter_bin() {
 
 try_local_binaries() {
   local status=0
-  local converter_bin="${DOVIFUSE_CONVERTER_BIN-${DV8_CONVERTER_BIN:-}}"
+  local converter_bin="${DOVIFUSE_CONVERTER_BIN-}"
 
   if [[ -n "$converter_bin" ]]; then
     run_converter_bin "$converter_bin" "$@"

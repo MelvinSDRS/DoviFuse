@@ -341,10 +341,8 @@ Finder. The app waits for both output streams to finish, verifies agreement with
 the saved terminal report, and binds repair availability to the unchanged checked
 file identity.
 
-## Upgrading from DV8 Maker
+## Configuration names
 
-The launcher is now `DoviFuse.sh` and configuration variables use `DOVIFUSE_`.
-The old `DV7toDV8.sh` launcher and `DV8_` variables remain accepted for existing
-automation; new variables take precedence. The queue lock location is retained
-so old and new launchers coordinate safely. `DV8` in media filenames means
-Dolby Vision Profile 8 and is unchanged by the project rename.
+Use `DoviFuse.sh`, `config/dovifuse.json`, and `DOVIFUSE_` environment variables.
+The qBittorrent wrapper uses `/tmp/dovifuse-qbt` for its queue and locks by default.
+`DV8` in media filenames means Dolby Vision Profile 8.

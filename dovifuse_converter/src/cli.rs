@@ -214,9 +214,7 @@ fn parse_args_from(original_args: Vec<String>) -> AppResult<CliArgs> {
     let mut report = None;
     let mut repair_sync_offset: Option<i64> = None;
     let mut custom_output: Option<PathBuf> = None;
-    let mut tmp_dir = env::var_os("DOVIFUSE_TMP_DIR")
-        .or_else(|| env::var_os("DV8_TMP_DIR"))
-        .map(PathBuf::from);
+    let mut tmp_dir = env::var_os("DOVIFUSE_TMP_DIR").map(PathBuf::from);
     let mut hwaccel = HwAccelMode::Auto;
     let mut progress = ProgressMode::Human;
     let mut hybrid = HybridOptions::default();
