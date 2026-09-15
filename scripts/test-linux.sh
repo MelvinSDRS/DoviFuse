@@ -30,6 +30,7 @@ fi
 python3 -m unittest discover -s scripts -p "test_release_gates.py"
 python3 -m unittest discover -s scripts -p "test_release_publication.py"
 python3 -m unittest discover -s scripts -p "test_launcher.py"
+python3 -m unittest discover -s scripts -p "test_macos_bundle_groups.py"
 python3 -m unittest discover -s scripts -p "test_release_sources.py"
 python3 -m unittest discover -s scripts -p "test_bundle_licenses.py"
 python3 scripts/verify_reference_catalog.py

@@ -16,13 +16,15 @@ struct ProcessingTimelineRenderingTests {
         _ = NSApp.setActivationPolicy(.accessory)
         NSApp.finishLaunching()
         NSApp.activate(ignoringOtherApps: true)
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        precondition(!reduceMotion,
+                     "TimelineView animation test requires Reduce Motion disabled (com.apple.Accessibility ReduceMotionEnabled=false)")
 
         let rootView = OrganicProcessingField(mode: .hybrid, progress: 0.54, active: true)
             .environment(\.scenePhase, .active)
             .frame(width: 760, height: 360)
         let hosting = NSHostingView(rootView: rootView)
-        // Keep the hosting view onscreen: macOS 15 can suspend TimelineView's
-        // animation schedule for a window placed outside every display.
+        // Keep the hosting view onscreen so the window server schedules it on CI.
         let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 760, height: 360),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -41,7 +43,7 @@ struct ProcessingTimelineRenderingTests {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.50))
         let second = try snapshot(of: hosting)
         let diagnostics = "appActive=\(NSApp.isActive), windowVisible=\(window.isVisible), "
-            + "screenCount=\(NSScreen.screens.count), reduceMotion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)"
+            + "screenCount=\(NSScreen.screens.count), reduceMotion=\(reduceMotion)"
         window.close()
 
         precondition(first != second,

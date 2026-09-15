@@ -18,6 +18,37 @@ import time
 from audit_fixtures import sha256
 
 ROOT = Path(__file__).resolve().parents[1]
+ACTIVE_CHILDREN = set()
+
+
+def terminate_process(process, timeout=5):
+    """Terminate one converter process and every child in its private group."""
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=timeout)
+
+
+def terminate_active_children():
+    for process in list(ACTIVE_CHILDREN):
+        terminate_process(process)
+
+
+def handle_sigterm(signum, _frame):
+    # audit_faults starts each converter in its own session so the test can
+    # inspect descendant cleanup.  The outer runner's process-group signal
+    # cannot reach that nested session after this parent receives SIGTERM.
+    terminate_active_children()
+    raise SystemExit(128 + signum)
 
 
 def alive(pid):
@@ -64,6 +95,8 @@ def main():
     if opts.case:
         cases = [case for case in cases if case[0] == opts.case]
         assert cases, 'Unknown fault case: '+opts.case
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, handle_sigterm)
     results = []
     app_replays = []
     for name, mode, tool, tokens, action in cases:
@@ -103,6 +136,7 @@ def main():
         try:
             with (work/'run.log').open('w') as log:
                 process = subprocess.Popen(args, env=env, stdout=log, stderr=log, start_new_session=True)
+                ACTIVE_CHILDREN.add(process)
                 deadline = time.monotonic()+60
                 while not (work/'triggered').exists() and process.poll() is None and time.monotonic() < deadline:
                     time.sleep(.05)
@@ -170,10 +204,12 @@ def main():
                     except ProcessLookupError:
                         pass
             if process is not None and process.poll() is None:
-                process.kill()
-                process.wait(timeout=5)
+                terminate_process(process)
+            if process is not None:
+                ACTIVE_CHILDREN.discard(process)
         results.append(row)
         print(json.dumps(row), flush=True)
+    signal.signal(signal.SIGTERM, previous_sigterm)
     summary = {'kind': 'synthetic-fault-injection', 'binary_sha256': sha256(binary), 'cases': results,
                'limits': ['ENOSPC/EIO are tool-boundary injections, not a real disconnected NAS.',
                           'No power-loss or uninterruptible kernel I/O guarantee.']}

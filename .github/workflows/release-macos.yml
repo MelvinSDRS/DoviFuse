@@ -186,6 +186,8 @@ jobs:
         with:
           name: macos-regression-evidence
           path: |
+            /tmp/dovifuse-audit-macos-bundle*/*.json
+            /tmp/dovifuse-audit-macos-bundle*/*.log
             /tmp/dovifuse-storage-*/summary.json
             /tmp/dovifuse-storage-*/*.log
             /tmp/dovifuse-storage-*/*.json

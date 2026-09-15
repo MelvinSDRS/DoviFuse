@@ -13,7 +13,6 @@ export DOVIFUSE_AUDIT_RESOURCES="$RESOURCES"
 export DOVIFUSE_AUDIT_BIN="$RESOURCES/tools/dovifuse_converter"
 export DOVIFUSE_AUDIT_FIXTURES="$FIXTURES"
 export DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES="${DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES:-$FIXTURES/donor-eligibility}"
-export DOVIFUSE_APP_REPLAY_MANIFEST=$(mktemp /tmp/dovifuse-app-replay.XXXXXX)
 unset PYTHONOPTIMIZE
 export TMPDIR=/tmp
 codesign --verify --deep --strict "$APP"
@@ -39,34 +38,31 @@ for package in notices:
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected, path
 print('Passed: bundled Rust license notices', len(notices))
 PY
-"$PYTHON" "$ROOT/scripts/audit_smoke.py"
-"$PYTHON" "$ROOT/scripts/test_donor_eligibility.py"
-"$PYTHON" "$ROOT/scripts/test_mapping_policy.py"
-"$PYTHON" "$ROOT/scripts/test_metadata_transport.py"
-"$PYTHON" "$ROOT/scripts/test_temporal_alignment.py"
-"$PYTHON" "$ROOT/scripts/test_picture_coverage.py"
-"$PYTHON" "$ROOT/scripts/test_p2_reuse.py"
 export DOVIFUSE_TEMPORAL_LOCAL_FIXTURES="${DOVIFUSE_TEMPORAL_LOCAL_FIXTURES:-$DOVIFUSE_AUDIT_FIXTURES/temporal-local}"
 if [[ ! -f "$DOVIFUSE_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
   echo "Missing Linux-prepared temporal-local fixture manifest: $DOVIFUSE_TEMPORAL_LOCAL_FIXTURES/manifest.json" >&2
   echo "Upload and download the temporal-local fixture directory before running the Mac bundle checks." >&2
   exit 1
 fi
-"$PYTHON" "$ROOT/scripts/test_temporal_local_edits.py" \
-  --fixtures "$DOVIFUSE_TEMPORAL_LOCAL_FIXTURES"
-"$PYTHON" "$ROOT/scripts/test_p5_disabled.py"
-"$PYTHON" "$ROOT/scripts/audit_standard_source.py"
-"$PYTHON" "$ROOT/scripts/test_job_report.py"
-"$PYTHON" "$ROOT/scripts/audit_faults.py"
-"$PYTHON" "$ROOT/scripts/audit_macos_storage.py"
-if [[ -n ${DOVIFUSE_AUDIT_SMB_ROOT:-} ]]; then
-  "$PYTHON" "$ROOT/scripts/audit_macos_smb.py" --destination-root "$DOVIFUSE_AUDIT_SMB_ROOT"
+RUN_DIR=$(mktemp -d /tmp/dovifuse-audit-macos-bundle.XXXXXX)
+GROUP_STATUS=0
+if "$PYTHON" "$ROOT/scripts/run_macos_bundle_groups.py" "$FIXTURES" \
+  --run-dir "$RUN_DIR" --workers "${DOVIFUSE_MACOS_BUNDLE_WORKERS:-4}"; then
+  GROUP_STATUS=0
+else
+  GROUP_STATUS=$?
 fi
-"$PYTHON" "$ROOT/scripts/audit_preservation.py"
-DOVIFUSE_L5_TIMELINE_BIN="$ROOT/dovifuse_converter/target/release/examples/l5_timeline" \
-  "$PYTHON" "$ROOT/scripts/audit_l5.py"
-# Tests and logs above live in an independently owned /tmp directory.
-codesign --verify --deep --strict "$APP"
+# Keep a final signature check even when a parallel audit fails, so a later
+# failure cannot hide bundle mutation or an invalid signature.
+if ! codesign --verify --deep --strict "$APP"; then
+  echo "Final bundle signature verification failed" >&2
+  exit 1
+fi
+if [[ "$GROUP_STATUS" -ne 0 ]]; then
+  echo "One or more parallel macOS bundle audits failed; see $RUN_DIR/summary.json" >&2
+  exit "$GROUP_STATUS"
+fi
+export DOVIFUSE_APP_REPLAY_MANIFEST="$RUN_DIR/app-replay.json"
 TEST_DIR=$(mktemp -d /tmp/dovifuse-app-state.XXXXXX)
 TEST_BIN="$TEST_DIR/test"
 trap 'rm -rf "$TEST_DIR"' EXIT
