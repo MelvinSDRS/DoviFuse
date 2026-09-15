@@ -11,6 +11,10 @@ struct ProcessingTimelineRenderingTests {
     @MainActor
     static func main() throws {
         _ = NSApplication.shared
+        // The scenePhase environment does not activate an AppKit process. Keep
+        // TimelineView's animation clock live on headless CI runners.
+        _ = NSApp.setActivationPolicy(.accessory)
+        NSApp.activate(ignoringOtherApps: true)
 
         let rootView = OrganicProcessingField(mode: .hybrid, progress: 0.54, active: true)
             .environment(\.scenePhase, .active)
@@ -19,6 +23,8 @@ struct ProcessingTimelineRenderingTests {
         let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 760, height: 360),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        // The assertion must remain independent of pointer or hover events.
+        window.ignoresMouseEvents = true
         window.contentView = hosting
         hosting.frame = NSRect(x: 0, y: 0, width: 760, height: 360)
         window.orderFrontRegardless()
