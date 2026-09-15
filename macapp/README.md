@@ -4,10 +4,10 @@
 standard and hybrid conversion modes. It stores large intermediates in a
 user-selected external-SSD folder and bundles every runtime command-line tool.
 
-Build on the M4 Mac mini:
+Build on an Apple Silicon Mac with Xcode installed:
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./macapp/build-macos-app.sh
+DEVELOPER_DIR="$(xcode-select -p)" ./macapp/build-macos-app.sh
 ```
 
 The reproducible build cache is written to `.macos-build-cache/`; the finished,
@@ -43,9 +43,22 @@ Create the distributable disk image after building:
 ```
 
 The result is `dist/DV8-Maker-arm64.dmg` with a matching SHA-256 file. Pushes to
-`main` run `.github/workflows/release-macos.yml`; publishing also requires Linux
-and bundled Mac regression tests and all reference acceptance gates. Those
-gates are currently pending, so the hybrid release cannot publish yet.
+`main` run `.github/workflows/release-macos.yml`. After Linux regressions,
+packaged Mac tests, and DMG verification pass, a separate publishing job creates
+an **experimental prerelease** with the DMG, portable SHA-256 checksums, and the
+release source archive. Pull requests build and verify the DMG without publishing.
+
+To rerun publication, dispatch the workflow on `main` with the default
+`experimental` channel. To request a stable release, select `stable`: it also
+requires `scripts/verify_reference_catalog.py --release` to pass. Pending
+acceptance is reported in the normal CI summary and continues to block stable
+releases. Published commit releases are kept unchanged on reruns; failed draft
+uploads can be retried.
+
+The app is ad-hoc signed, not Developer ID signed or notarized. A downloaded app
+may require approval under **System Settings → Privacy & Security**. Stable
+playback acceptance and notarization are separate from a successful automated
+experimental build.
 
 Job reports are saved automatically under
 `~/Library/Application Support/DV8 Maker/Reports/` and can be revealed with

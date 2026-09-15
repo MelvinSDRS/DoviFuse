@@ -28,6 +28,6 @@ hdiutil create \
   -ov \
   "$DMG"
 hdiutil verify "$DMG"
-shasum -a 256 "$DMG" > "$DMG.sha256"
+(cd "$ROOT/dist" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
 
 echo "Built: $DMG"

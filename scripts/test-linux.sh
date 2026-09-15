@@ -28,6 +28,9 @@ if [[ ! -f "$DV8_DONOR_ELIGIBILITY_FIXTURES/manifest.json" ]]; then
     --base-fixtures "$DV8_AUDIT_FIXTURES"
 fi
 python3 -m unittest discover -s scripts -p "test_release_gates.py"
+python3 -m unittest discover -s scripts -p "test_release_publication.py"
+python3 -m unittest discover -s scripts -p "test_release_sources.py"
+python3 -m unittest discover -s scripts -p "test_bundle_licenses.py"
 python3 scripts/verify_reference_catalog.py
 python3 scripts/audit_smoke.py
 python3 scripts/test_donor_eligibility.py

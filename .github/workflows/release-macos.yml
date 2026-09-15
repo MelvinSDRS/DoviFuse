@@ -1,4 +1,4 @@
-name: Release DV8 Maker for macOS
+name: Build and release DV8 Maker
 
 on:
   push:
@@ -7,6 +7,18 @@ on:
 
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_channel:
+        description: Experimental download or stable release (requires acceptance evidence)
+        type: choice
+        options:
+          - experimental
+          - stable
+        default: experimental
+
+concurrency:
+  group: dv8-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -50,6 +62,8 @@ jobs:
             /tmp/dv8-ci-fixtures/donor-eligibility/*.mkv
             /tmp/dv8-ci-fixtures/picture-coverage/manifest.json
             /tmp/dv8-ci-fixtures/picture-coverage/*.mkv
+            /tmp/dv8-ci-fixtures/temporal-local/manifest.json
+            /tmp/dv8-ci-fixtures/temporal-local/*.mkv
           if-no-files-found: error
       - name: Preserve Linux test evidence
         if: always()
@@ -87,11 +101,9 @@ jobs:
             /tmp/dv8-reuse-*/report.json
             /tmp/dv8-mapping-*/*.report.json
 
-  release:
-    name: Build and verify Apple Silicon app
+  macos:
+    name: Build, test and package Apple Silicon app
     needs: linux
-    permissions:
-      contents: write
     runs-on: macos-15
     timeout-minutes: 120
 
@@ -167,29 +179,62 @@ jobs:
             /tmp/dv8-reuse-*/report.json
             /tmp/dv8-mapping-*/*.report.json
 
-      - name: Require hybrid release acceptance evidence
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Record acceptance status
+        run: |
+          python3 scripts/verify_reference_catalog.py > /tmp/dv8-acceptance.json
+          {
+            echo '### Release acceptance'
+            echo 'Experimental downloads require passing build and regression checks.'
+            echo 'Stable releases additionally require all acceptance evidence.'
+            echo '```json'
+            cat /tmp/dv8-acceptance.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require acceptance evidence for a stable release
+        if: github.event_name == 'workflow_dispatch' && inputs.release_channel == 'stable'
         run: python3 scripts/verify_reference_catalog.py --release
 
       - name: Create and verify DMG
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: ./macapp/create-dmg.sh
 
-      - name: Publish commit release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Package release sources
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: python3 scripts/package_release_sources.py --output dist
+
+      - name: Upload release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            dist/DV8-Maker-arm64.dmg
+            dist/DV8-Maker-arm64.dmg.sha256
+            dist/DV8-Maker-sources.tar.gz
+            dist/DV8-Maker-sources.tar.gz.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish verified DMG
+    needs: macos
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch reference catalog for stable acceptance verification
+        if: inputs.release_channel == 'stable'
+        uses: actions/checkout@v4
+        with:
+          repository: quietvoid/dovi_tool
+          ref: b25558062e4a56973482ec70133bd7b891320e48
+          path: dovi_tool
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist
+      - name: Publish release with checksums and sources
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="main-${GITHUB_SHA}"
-          title="DV8 Maker ${GITHUB_SHA:0:7}"
-          dmg="dist/DV8-Maker-arm64.dmg"
-          checksum="dist/DV8-Maker-arm64.dmg.sha256"
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$dmg" "$checksum" --clobber
-          else
-            gh release create "$tag" "$dmg" "$checksum" \
-              --target "$GITHUB_SHA" \
-              --title "$title" \
-              --notes "Automatic Apple Silicon build from commit $GITHUB_SHA. This personal-use app is ad-hoc signed; on first launch, right-click DV8 Maker and choose Open."
-          fi
+          RELEASE_CHANNEL: ${{ inputs.release_channel || 'experimental' }}
+        run: ./scripts/publish-release.sh

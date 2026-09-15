@@ -7,12 +7,14 @@ and canonical Profile 8.1 RPUs, except that twenty consecutive RPU scene
 starts are shifted by +12 and +48 frames.  The video scene cuts therefore
 still support the global offset 0 while exposing a local edit contradiction.
 
-Prepare a portable fixture on a host with an encoder and MKVToolNix::
+Prepare a portable fixture on an encoder-capable host (the Linux CI job)::
 
     python3 scripts/test_temporal_local_edits.py --prepare /tmp/dv8-temporal-fixture
 
-Then run it with ``DV8_TEMPORAL_LOCAL_FIXTURES`` on Linux or macOS.  The
-fixture and all conversion outputs remain outside the repository.
+Then run it with ``DV8_TEMPORAL_LOCAL_FIXTURES`` on Linux or macOS.  The Mac
+bundle check consumes this prebuilt fixture; it does not require an HEVC
+encoder.  The fixture and all conversion outputs remain outside the
+repository.
 """
 
 from __future__ import annotations
@@ -55,6 +57,7 @@ DURATIONS = authored_durations()
 TOTAL_FRAMES = sum(DURATIONS)
 SCENE_STARTS = tuple(sum(DURATIONS[:index]) for index in range(FRAME_COUNT))
 MEDIA_NAMES = ("hdr.mkv", "local-12.mkv", "local-48.mkv")
+MANIFEST_KIND = "synthetic-temporal-local-edits"
 
 
 def sha256(path: Path) -> str:
@@ -240,14 +243,39 @@ def prepare(destination: Path) -> None:
 
 
 def load_fixture(source: Path) -> dict[str, object]:
-    manifest = json.loads((source / "manifest.json").read_text())
-    if manifest.get("kind") != "synthetic-temporal-local-edits" or not manifest.get("synthetic_only"):
+    try:
+        manifest = json.loads((source / "manifest.json").read_text())
+    except (OSError, ValueError) as error:
+        raise RuntimeError(
+            f"Unable to read temporal-local fixture manifest: {source / 'manifest.json'}"
+        ) from error
+    if not isinstance(manifest, dict):
+        raise RuntimeError("Temporal-local fixture manifest must be a JSON object")
+    if manifest.get("kind") != MANIFEST_KIND or not manifest.get("synthetic_only"):
         raise RuntimeError("Fixture is not the synthetic temporal-local-edits fixture")
     if manifest.get("frames") != TOTAL_FRAMES or manifest.get("cut_count") != FRAME_COUNT:
         raise RuntimeError("Fixture schedule does not match this regression script")
+    if (
+        manifest.get("local_start_index") != LOCAL_START
+        or manifest.get("local_cut_count") != LOCAL_COUNT
+    ):
+        raise RuntimeError("Fixture local-edit schedule does not match this regression script")
+    if manifest.get("local_deltas") != list(LOCAL_DELTAS):
+        raise RuntimeError("Fixture local offsets do not match this regression script")
+    if (
+        manifest.get("scene_durations_min") != min(DURATIONS)
+        or manifest.get("scene_durations_max") != max(DURATIONS)
+    ):
+        raise RuntimeError("Fixture scene duration bounds do not match this regression script")
+    checksums = manifest.get("sha256")
+    if not isinstance(checksums, dict):
+        raise RuntimeError("Fixture manifest is missing media checksums")
     for name in MEDIA_NAMES:
         path = source / name
-        if not path.is_file() or sha256(path) != manifest["sha256"][name]:
+        expected = checksums.get(name)
+        if not isinstance(expected, str) or len(expected) != 64:
+            raise RuntimeError(f"Fixture manifest is missing a valid checksum: {name}")
+        if not path.is_file() or sha256(path) != expected:
             raise RuntimeError(f"Fixture checksum mismatch: {name}")
     return manifest
 
@@ -443,7 +471,7 @@ def main() -> int:
             args.binary.resolve(),
             args.baseline.resolve() if args.baseline is not None else None,
         )
-    except (AssertionError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+    except (AssertionError, OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
     return 0

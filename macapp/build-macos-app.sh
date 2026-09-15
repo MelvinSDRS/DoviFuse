@@ -126,6 +126,7 @@ cp "$ROOT/dovi_tool/LICENSE" "$RESOURCES/licenses/dovi_tool-MIT.txt"
 cp "$MKV_MOUNT/COPYING.txt" "$RESOURCES/licenses/MKVToolNix-GPL.txt"
 cp "$MEDIAINFO_MOUNT/License.html" "$RESOURCES/licenses/MediaInfo-License.html"
 cp "$FFMPEG_SOURCE/COPYING.GPLv3" "$RESOURCES/licenses/FFmpeg-GPLv3.txt"
+cp "$ROOT/LICENSE" "$RESOURCES/licenses/DV8-MIT.txt"
 /usr/bin/python3 "$ROOT/macapp/bundle-rust-licenses.py" "$RESOURCES"
 chmod +x "$TOOLS"/* "$RESOURCES/vendor/MKVToolNix"/mkvmerge "$RESOURCES/vendor/MKVToolNix"/mkvextract
 

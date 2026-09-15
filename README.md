@@ -27,6 +27,18 @@ diagnostics and research remain on the unpublished development branch
 > after successful output validation. Hybrid mode always keeps both source
 > files. Review the output and saved report before any separate cleanup.
 
+## Download the macOS app
+
+Apple Silicon DMGs are published automatically to [GitHub Releases](https://github.com/MelvinSDRS/DV8/releases)
+after the Linux and packaged macOS tests pass. Choose an **experimental** release
+and download `DV8-Maker-arm64.dmg`. Open the image and drag DV8 Maker into
+Applications. The app is ad-hoc signed and not notarized; macOS may require
+approval in **System Settings → Privacy & Security** before opening it.
+
+Each release includes SHA-256 checksums and a source archive. Experimental
+releases have not passed the full playback acceptance required for stable
+releases. See [macOS build and release notes](macapp/README.md).
+
 ## What this project contains
 
 - The Rust orchestration in `dv8_converter/` probes media, coordinates
