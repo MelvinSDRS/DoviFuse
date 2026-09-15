@@ -21,9 +21,13 @@ struct OrganicProcessingField: View {
         GeometryReader { geometry in
             TimelineView(.animation(minimumInterval: 1.0 / 30,
                                     paused: (!active && !settling) || reduceMotion || scenePhase != .active)) { timeline in
+                // Resolve timeline-dependent values in the TimelineView
+                // content closure. Canvas retains its renderer closure, so a
+                // date read only inside that closure can leave the display
+                // list stuck until an unrelated hover/layout event redraws it.
+                let time = reduceMotion ? 0 : motion.value(at: timeline.date)
+                let fraction = reduceMotion ? ProcessingTransition.clamp(progress) : progressTransition.value(at: timeline.date)
                 Canvas(opaque: false) { context, size in
-                    let time = reduceMotion ? 0 : motion.value(at: timeline.date)
-                    let fraction = reduceMotion ? ProcessingTransition.clamp(progress) : progressTransition.value(at: timeline.date)
                     ProcessingRibbons(size: size, time: time, progress: fraction,
                                   pointer: reduceMotion ? .zero : pointer, mode: mode)
                         .draw(context: &context)

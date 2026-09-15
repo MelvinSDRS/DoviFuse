@@ -75,3 +75,10 @@ xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
   "$ROOT/macapp/DoviFuse/ScratchCapacity.swift" \
   "$ROOT/macapp/Tests/AppModelAuditTests.swift" -o "$TEST_BIN"
 "$TEST_BIN"
+ANIMATION_TEST_BIN="$TEST_DIR/processing-timeline"
+xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
+  "$ROOT/macapp/DoviFuse/ProcessingMotion.swift" \
+  "$ROOT/macapp/DoviFuse/ProcessingRibbons.swift" \
+  "$ROOT/macapp/DoviFuse/OrganicProcessingField.swift" \
+  "$ROOT/macapp/Tests/ProcessingTimelineRenderingTests.swift" -o "$ANIMATION_TEST_BIN"
+"$ANIMATION_TEST_BIN"
