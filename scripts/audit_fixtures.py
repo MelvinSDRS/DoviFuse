@@ -21,7 +21,7 @@ def sha256(path):
 
 
 def prepare(WORK, ROOT, FF, DOVI, run):
-    source = os.environ.get('DV8_AUDIT_FIXTURES')
+    source = os.environ.get('DOVIFUSE_AUDIT_FIXTURES')
     if source:
         source = Path(source)
         manifest = json.loads((source/'manifest.json').read_text())
@@ -103,6 +103,6 @@ if __name__ == '__main__':
         result = subprocess.run([str(a) for a in args], capture_output=True)
         (work/f'{name}.log').write_bytes(result.stdout+result.stderr)
         result.check_returncode()
-    prepare(work, root, Path(os.environ.get('DV8_AUDIT_FFMPEG', root/'tools/ffmpeg')),
+    prepare(work, root, Path(os.environ.get('DOVIFUSE_AUDIT_FFMPEG', root/'tools/ffmpeg')),
             root/'tools/dovi_tool', run)
     print(work)

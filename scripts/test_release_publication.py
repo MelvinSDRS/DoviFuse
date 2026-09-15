@@ -17,7 +17,7 @@ class PublicationTests(unittest.TestCase):
         (self.root / 'scripts').mkdir()
         (self.root / 'dist').mkdir()
         shutil.copyfile(Path(__file__).with_name('publish-release.sh'), self.root / 'scripts/publish-release.sh')
-        for name in ['DV8-Maker-arm64.dmg', 'DV8-Maker-sources.tar.gz']:
+        for name in ['DoviFuse-arm64.dmg', 'DoviFuse-sources.tar.gz']:
             data = ('fixture ' + name).encode()
             (self.root / 'dist' / name).write_bytes(data)
             (self.root / 'dist' / (name + '.sha256')).write_text(
@@ -67,12 +67,12 @@ if sys.argv[1:3] == ['release', 'upload'] and os.environ.get('FAIL_UPLOAD'):
         self.assertFalse(any(c[:2] == ['release', 'edit'] for c in self.calls()))
 
     def test_invalid_checksum_never_contacts_github(self):
-        (self.root / 'dist/DV8-Maker-arm64.dmg').write_bytes(b'corrupted')
+        (self.root / 'dist/DoviFuse-arm64.dmg').write_bytes(b'corrupted')
         self.assertNotEqual(self.run_publish().returncode, 0)
         self.assertEqual(self.calls(), [])
 
     def test_missing_sources_never_contacts_github(self):
-        (self.root / 'dist/DV8-Maker-sources.tar.gz').unlink()
+        (self.root / 'dist/DoviFuse-sources.tar.gz').unlink()
         self.assertNotEqual(self.run_publish().returncode, 0)
         self.assertEqual(self.calls(), [])
 

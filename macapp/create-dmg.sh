@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-APP="$ROOT/dist/DV8 Maker.app"
-DMG="$ROOT/dist/DV8-Maker-arm64.dmg"
+APP="$ROOT/dist/DoviFuse.app"
+DMG="$ROOT/dist/DoviFuse-arm64.dmg"
 STAGING="$ROOT/.macos-build-cache/dmg-root"
 
 if [[ ! -d $APP ]]; then
@@ -16,12 +16,12 @@ codesign --verify --deep --strict "$APP"
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
-ditto "$APP" "$STAGING/DV8 Maker.app"
+ditto "$APP" "$STAGING/DoviFuse.app"
 ln -s /Applications "$STAGING/Applications"
 
 rm -f "$DMG" "$DMG.sha256"
 hdiutil create \
-  -volname "DV8 Maker" \
+  -volname "DoviFuse" \
   -srcfolder "$STAGING" \
   -format UDZO \
   -imagekey zlib-level=9 \

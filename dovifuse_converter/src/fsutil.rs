@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn archive_cancel_after_copy_starts_preserves_source_and_removes_partial() {
-        let root = create_job_dir(&std::env::temp_dir(), "dv8-archive-cancel-test").unwrap();
+        let root = create_job_dir(&std::env::temp_dir(), "dovifuse-archive-cancel-test").unwrap();
         let archive = root.join("archive");
         fs::create_dir(&archive).unwrap();
         let source = root.join("source.hevc");
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn archive_collision_preserves_both_files() {
-        let root = create_job_dir(&std::env::temp_dir(), "dv8-archive-test").unwrap();
+        let root = create_job_dir(&std::env::temp_dir(), "dovifuse-archive-test").unwrap();
         let archive = root.join("archive");
         fs::create_dir(&archive).unwrap();
         let source = root.join("same.hevc");

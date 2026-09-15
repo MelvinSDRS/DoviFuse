@@ -343,7 +343,7 @@ fn process_hybrid_impl(
         .ok_or_else(|| format!("Invalid HDR target path: {}", hdr_target.display()))?;
     let scratch_root = rt.tmp_dir.as_deref().unwrap_or(target_dir);
     let tmp_dir_owned = if !rt.dry_run {
-        create_job_dir(scratch_root, "dv8-hybrid")?
+        create_job_dir(scratch_root, "dovifuse-hybrid")?
     } else {
         scratch_root.to_path_buf()
     };
@@ -988,7 +988,7 @@ mod repair_tests {
     #[test]
     fn repair_output_is_non_destructive_and_numbered() {
         let root =
-            std::env::temp_dir().join(format!("dv8-repair-name-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("dovifuse-repair-name-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let input = root.join("Movie.mkv");

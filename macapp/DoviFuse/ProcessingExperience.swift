@@ -33,12 +33,12 @@ struct ProcessingExperience: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .tracking(3)
                         .foregroundStyle(accent)
-                    Text(model.selectedInput?.lastPathComponent ?? "DV8 Maker")
+                    Text(model.selectedInput?.lastPathComponent ?? "DoviFuse")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .help(model.selectedInput?.lastPathComponent ?? "DV8 Maker")
+                        .help(model.selectedInput?.lastPathComponent ?? "DoviFuse")
                 }
                 Spacer(minLength: 24)
                 Label(model.isRunning ? "LIVE" : (finished ? "FINISHED" : "STOPPED"),
@@ -55,8 +55,11 @@ struct ProcessingExperience: View {
                     OrganicProcessingField(mode: model.mode, progress: fraction ?? 0, active: active)
                         .padding(.horizontal, -32)
 
-                    Text("DV8")
+                    Text("DoviFuse")
                         .font(.system(size: side * 0.28, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.4)
+                        .frame(width: side * 0.84)
                         .foregroundStyle(LinearGradient(colors: [palette.text, palette.highlight],
                                                         startPoint: .leading, endPoint: .trailing))
                         .accessibilityHidden(true)

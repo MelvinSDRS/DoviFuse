@@ -30,7 +30,7 @@ def init_repo(path: Path, filename: str, content: bytes) -> str:
     path.mkdir(parents=True)
     run_git(path, "init", "-q")
     run_git(path, "config", "user.email", "release-test@example.invalid")
-    run_git(path, "config", "user.name", "DV8 release test")
+    run_git(path, "config", "user.name", "DoviFuse release test")
     (path / filename).write_bytes(content)
     run_git(path, "add", filename)
     run_git(path, "commit", "-qm", "fixture")
@@ -48,9 +48,9 @@ def source_tar(path: Path, top_level: str, filename: str) -> str:
 
 class ReleaseSourceMechanicsTests(unittest.TestCase):
     def test_bundle_excludes_untracked_private_checkout_state(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="dv8-release-source-test-") as raw:
+        with tempfile.TemporaryDirectory(prefix="dovifuse-release-source-test-") as raw:
             work = Path(raw)
-            repo = work / "dv8"
+            repo = work / "dovifuse"
             dovi = repo / "dovi_tool"
             init_repo(repo, "tracked.txt", b"tracked source\n")
             dovi_revision = init_repo(dovi, "LICENSE", b"MIT fixture\n")
@@ -89,30 +89,30 @@ class ReleaseSourceMechanicsTests(unittest.TestCase):
             )
             with tarfile.open(archive_path, mode="r:gz") as outer:
                 names = outer.getnames()
-                self.assertIn("DV8-Maker-sources/SOURCE-BUNDLE-README.txt", names)
-                self.assertNotIn("DV8-Maker-sources/.env", names)
-                dv8_name = next(
+                self.assertIn("DoviFuse-sources/SOURCE-BUNDLE-README.txt", names)
+                self.assertNotIn("DoviFuse-sources/.env", names)
+                dovifuse_name = next(
                     name
                     for name in names
-                    if name.startswith("DV8-Maker-sources/DV8-Maker-")
+                    if name.startswith("DoviFuse-sources/DoviFuse-")
                     and name.endswith(".tar")
                 )
-                payload = outer.extractfile(dv8_name).read()
-            with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as dv8_archive:
-                archived_names = dv8_archive.getnames()
+                payload = outer.extractfile(dovifuse_name).read()
+            with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as dovifuse_archive:
+                archived_names = dovifuse_archive.getnames()
                 self.assertTrue(any(name.endswith("/tracked.txt") for name in archived_names))
                 self.assertFalse(any(".env" in name for name in archived_names))
                 self.assertFalse(any(".macos-build-cache" in name for name in archived_names))
                 self.assertFalse(any("logs/" in name for name in archived_names))
 
     def test_missing_ffmpeg_fails_before_optional_download(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="dv8-release-source-test-") as raw:
+        with tempfile.TemporaryDirectory(prefix="dovifuse-release-source-test-") as raw:
             work = Path(raw)
-            repo = work / "dv8"
+            repo = work / "dovifuse"
             dovi_revision = init_repo(repo / "dovi_tool", "LICENSE", b"MIT fixture\n")
             run_git(repo, "init", "-q")
             run_git(repo, "config", "user.email", "release-test@example.invalid")
-            run_git(repo, "config", "user.name", "DV8 release test")
+            run_git(repo, "config", "user.name", "DoviFuse release test")
             (repo / "tracked.txt").write_text("tracked\n", encoding="utf-8")
             run_git(repo, "add", "tracked.txt")
             run_git(repo, "commit", "-qm", "fixture")
@@ -127,7 +127,7 @@ class ReleaseSourceMechanicsTests(unittest.TestCase):
                 )
 
     def test_private_tar_member_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="dv8-release-source-test-") as raw:
+        with tempfile.TemporaryDirectory(prefix="dovifuse-release-source-test-") as raw:
             archive_path = Path(raw) / "unsafe.tar"
             with tarfile.open(archive_path, mode="w") as archive:
                 info = tarfile.TarInfo("root/.env")
@@ -137,7 +137,7 @@ class ReleaseSourceMechanicsTests(unittest.TestCase):
                 package._validate_tar(archive_path, "fixture")
 
     def test_upstream_private_implementation_headers_are_allowed(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="dv8-release-source-test-") as raw:
+        with tempfile.TemporaryDirectory(prefix="dovifuse-release-source-test-") as raw:
             archive_path = Path(raw) / "upstream.tar.xz"
             source_tar(archive_path, "mkvtoolnix-100.0", "src/common/private/dts_parser.h")
             package._validate_tar(archive_path, "upstream", "mkvtoolnix-100.0")

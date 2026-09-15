@@ -8,9 +8,9 @@ import tempfile
 import time
 
 root=Path(__file__).resolve().parents[1]
-work=Path(tempfile.mkdtemp(prefix='dv8-wrapper-audit-'))
-for rc in (1,0):
-    case=work/str(rc);case.mkdir()
+work=Path(tempfile.mkdtemp(prefix='dovifuse-wrapper-audit-'))
+for rc, legacy in ((1, False), (0, False), (1, True), (0, True)):
+    case=work/f'{rc}-{legacy}';case.mkdir()
     tools=case/'tools';tools.mkdir()
     target=case/'movie.mkv';target.write_text('untouched')
     marker=case/'curl-calls'
@@ -21,11 +21,14 @@ for rc in (1,0):
     launcher.write_text('#!/bin/sh\necho "1 file(s) converted."\nexit '+str(rc)+'\n')
     launcher.chmod(0o755)
     env=dict(os.environ,PATH=str(tools)+os.pathsep+os.environ['PATH'],
-             DV8_ENV_FILE=str(case/'no.env'),DV8_BASE_DIR=str(case),DV8_SCRIPT_PATH=str(launcher),
-             DV8_RUN_DIR=str(case/'run'),DV8_TRIGGER_LOG_FILE=str(case/'index.log'),
-             DV8_MEDIA_ROOTS=str(case/'no-media'),DV8_QBT_REMOVE_CONVERTED='true',
-             DV8_AUTORUN_DRY_RUN='false',DV8_TELEGRAM_BOT_TOKEN='',DV8_TELEGRAM_CHAT_ID='',
-             DV8_EL_RPU_DIR=str(case/'archive'),DV8_QBT_API_URL='http://fake.invalid')
+             DOVIFUSE_ENV_FILE=str(case/'no.env'),DOVIFUSE_BASE_DIR=str(case),DOVIFUSE_SCRIPT_PATH=str(launcher),
+             DOVIFUSE_RUN_DIR=str(case/'run'),DOVIFUSE_TRIGGER_LOG_FILE=str(case/'index.log'),
+             DOVIFUSE_MEDIA_ROOTS=str(case/'no-media'),DOVIFUSE_QBT_REMOVE_CONVERTED='true',
+             DOVIFUSE_AUTORUN_DRY_RUN='false',DOVIFUSE_TELEGRAM_BOT_TOKEN='',DOVIFUSE_TELEGRAM_CHAT_ID='',
+             DOVIFUSE_EL_RPU_DIR=str(case/'archive'),DOVIFUSE_QBT_API_URL='http://fake.invalid')
+    if legacy:
+        env = {(key.replace('DOVIFUSE_', 'DV8_', 1) if key.startswith('DOVIFUSE_') else key): value
+               for key, value in env.items()}
     subprocess.run(['bash',str(root/'qbt_autorun_wrapper.sh'),str(target)],env=env,check=True,capture_output=True)
     deadline=time.monotonic()+10
     while time.monotonic()<deadline:

@@ -47,7 +47,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dv8_converter"
+name = "dovifuse_converter"
 version = "0.1.0"
 dependencies = [
  "serde",

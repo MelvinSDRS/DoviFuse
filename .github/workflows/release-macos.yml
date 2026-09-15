@@ -1,4 +1,4 @@
-name: Build and release DV8 Maker
+name: Build and release DoviFuse
 
 on:
   push:
@@ -17,7 +17,7 @@ on:
         default: build
 
 concurrency:
-  group: dv8-${{ github.workflow }}-${{ github.ref }}
+  group: dovifuse-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -45,10 +45,10 @@ jobs:
           ln -s ../dovi_tool/target/release/dovi_tool tools/dovi_tool
           ln -s /usr/bin/ffmpeg tools/ffmpeg
       - name: Prepare disposable media for both platforms
-        run: python3 scripts/audit_fixtures.py /tmp/dv8-ci-fixtures
+        run: python3 scripts/audit_fixtures.py /tmp/dovifuse-ci-fixtures
       - name: Rust, real tools and wrapper regression gates
         env:
-          DV8_AUDIT_FIXTURES: /tmp/dv8-ci-fixtures
+          DOVIFUSE_AUDIT_FIXTURES: /tmp/dovifuse-ci-fixtures
           PYTHONOPTIMIZE: ''
         run: ./scripts/test-linux.sh
       - name: Share only prepared test media
@@ -56,14 +56,14 @@ jobs:
         with:
           name: synthetic-mechanics-fixtures
           path: |
-            /tmp/dv8-ci-fixtures/manifest.json
-            /tmp/dv8-ci-fixtures/*.mkv
-            /tmp/dv8-ci-fixtures/donor-eligibility/manifest.json
-            /tmp/dv8-ci-fixtures/donor-eligibility/*.mkv
-            /tmp/dv8-ci-fixtures/picture-coverage/manifest.json
-            /tmp/dv8-ci-fixtures/picture-coverage/*.mkv
-            /tmp/dv8-ci-fixtures/temporal-local/manifest.json
-            /tmp/dv8-ci-fixtures/temporal-local/*.mkv
+            /tmp/dovifuse-ci-fixtures/manifest.json
+            /tmp/dovifuse-ci-fixtures/*.mkv
+            /tmp/dovifuse-ci-fixtures/donor-eligibility/manifest.json
+            /tmp/dovifuse-ci-fixtures/donor-eligibility/*.mkv
+            /tmp/dovifuse-ci-fixtures/picture-coverage/manifest.json
+            /tmp/dovifuse-ci-fixtures/picture-coverage/*.mkv
+            /tmp/dovifuse-ci-fixtures/temporal-local/manifest.json
+            /tmp/dovifuse-ci-fixtures/temporal-local/*.mkv
           if-no-files-found: error
       - name: Preserve Linux test evidence
         if: always()
@@ -71,35 +71,35 @@ jobs:
         with:
           name: linux-regression-evidence
           path: |
-            /tmp/dv8-audit-*/*.log
-            /tmp/dv8-audit-*/summary.json
-            /tmp/dv8-audit-*/*.report.json
-            /tmp/dv8-report-controls-*/*.json
-            /tmp/dv8-report-controls-*/*.log
-            /tmp/dv8-rust-tests.*
-            /tmp/dv8-faults-*/summary.json
-            /tmp/dv8-faults-*/*/*.log
-            /tmp/dv8-faults-*/*/report.json
-            /tmp/dv8-preservation-*/*.log
-            /tmp/dv8-preservation-*/summary.json
-            /tmp/dv8-l5-audit-*/*.log
-            /tmp/dv8-l5-audit-*/summary.json
-            /tmp/dv8-donor-eligibility-*/*.log
-            /tmp/dv8-donor-eligibility-*/summary.json
-            /tmp/dv8-donor-eligibility-*/*.report.json
-            /tmp/dv8-mapping-*/*.log
-            /tmp/dv8-mapping-*/summary.json
-            /tmp/dv8-metadata-*/summary.json
-            /tmp/dv8-metadata-*/*.log
-            /tmp/dv8-metadata-*/*.report.json
-            /tmp/dv8-temporal-*/*.log
-            /tmp/dv8-temporal-*/*.json
-            /tmp/dv8-picture-coverage-*/*.log
-            /tmp/dv8-picture-coverage-*/*.json
-            /tmp/dv8-reuse-*/summary.json
-            /tmp/dv8-reuse-*/*.log
-            /tmp/dv8-reuse-*/report.json
-            /tmp/dv8-mapping-*/*.report.json
+            /tmp/dovifuse-audit-*/*.log
+            /tmp/dovifuse-audit-*/summary.json
+            /tmp/dovifuse-audit-*/*.report.json
+            /tmp/dovifuse-report-controls-*/*.json
+            /tmp/dovifuse-report-controls-*/*.log
+            /tmp/dovifuse-rust-tests.*
+            /tmp/dovifuse-faults-*/summary.json
+            /tmp/dovifuse-faults-*/*/*.log
+            /tmp/dovifuse-faults-*/*/report.json
+            /tmp/dovifuse-preservation-*/*.log
+            /tmp/dovifuse-preservation-*/summary.json
+            /tmp/dovifuse-l5-audit-*/*.log
+            /tmp/dovifuse-l5-audit-*/summary.json
+            /tmp/dovifuse-donor-eligibility-*/*.log
+            /tmp/dovifuse-donor-eligibility-*/summary.json
+            /tmp/dovifuse-donor-eligibility-*/*.report.json
+            /tmp/dovifuse-mapping-*/*.log
+            /tmp/dovifuse-mapping-*/summary.json
+            /tmp/dovifuse-metadata-*/summary.json
+            /tmp/dovifuse-metadata-*/*.log
+            /tmp/dovifuse-metadata-*/*.report.json
+            /tmp/dovifuse-temporal-*/*.log
+            /tmp/dovifuse-temporal-*/*.json
+            /tmp/dovifuse-picture-coverage-*/*.log
+            /tmp/dovifuse-picture-coverage-*/*.json
+            /tmp/dovifuse-reuse-*/summary.json
+            /tmp/dovifuse-reuse-*/*.log
+            /tmp/dovifuse-reuse-*/report.json
+            /tmp/dovifuse-mapping-*/*.report.json
 
   macos:
     name: Build, test and package Apple Silicon app
@@ -122,15 +122,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: synthetic-mechanics-fixtures
-          path: /tmp/dv8-ci-fixtures
+          path: /tmp/dovifuse-ci-fixtures
 
       - name: Cache native build toolchain
         uses: actions/cache@v4
         with:
           path: .macos-build-cache
-          key: dv8-macos-arm64-${{ hashFiles('macapp/build-macos-app.sh', 'dv8_converter/Cargo.lock', 'dovi_tool/Cargo.lock') }}
+          key: dovifuse-macos-arm64-${{ hashFiles('macapp/build-macos-app.sh', 'dovifuse_converter/Cargo.lock', 'dovi_tool/Cargo.lock') }}
           restore-keys: |
-            dv8-macos-arm64-
+            dovifuse-macos-arm64-
 
       - name: Build self-contained app
         run: |
@@ -139,7 +139,7 @@ jobs:
       - name: Test packaged tools and app state
         run: |
           export DEVELOPER_DIR="$(xcode-select -p)"
-          ./scripts/test-macos-bundle.sh "dist/DV8 Maker.app" /tmp/dv8-ci-fixtures
+          ./scripts/test-macos-bundle.sh "dist/DoviFuse.app" /tmp/dovifuse-ci-fixtures
 
       - name: Preserve Mac test evidence
         if: always()
@@ -147,47 +147,47 @@ jobs:
         with:
           name: macos-regression-evidence
           path: |
-            /tmp/dv8-storage-*/summary.json
-            /tmp/dv8-storage-*/*.log
-            /tmp/dv8-storage-*/*.json
-            /tmp/dv8-audit-*/*.log
-            /tmp/dv8-audit-*/summary.json
-            /tmp/dv8-audit-*/*.report.json
-            /tmp/dv8-report-controls-*/*.json
-            /tmp/dv8-report-controls-*/*.log
-            /tmp/dv8-faults-*/summary.json
-            /tmp/dv8-faults-*/*/*.log
-            /tmp/dv8-faults-*/*/report.json
-            /tmp/dv8-preservation-*/*.log
-            /tmp/dv8-preservation-*/summary.json
-            /tmp/dv8-l5-audit-*/*.log
-            /tmp/dv8-l5-audit-*/summary.json
-            /tmp/dv8-donor-eligibility-*/*.log
-            /tmp/dv8-donor-eligibility-*/summary.json
-            /tmp/dv8-donor-eligibility-*/*.report.json
-            /tmp/dv8-mapping-*/*.log
-            /tmp/dv8-mapping-*/summary.json
-            /tmp/dv8-metadata-*/summary.json
-            /tmp/dv8-metadata-*/*.log
-            /tmp/dv8-metadata-*/*.report.json
-            /tmp/dv8-temporal-*/*.log
-            /tmp/dv8-temporal-*/*.json
-            /tmp/dv8-picture-coverage-*/*.log
-            /tmp/dv8-picture-coverage-*/*.json
-            /tmp/dv8-reuse-*/summary.json
-            /tmp/dv8-reuse-*/*.log
-            /tmp/dv8-reuse-*/report.json
-            /tmp/dv8-mapping-*/*.report.json
+            /tmp/dovifuse-storage-*/summary.json
+            /tmp/dovifuse-storage-*/*.log
+            /tmp/dovifuse-storage-*/*.json
+            /tmp/dovifuse-audit-*/*.log
+            /tmp/dovifuse-audit-*/summary.json
+            /tmp/dovifuse-audit-*/*.report.json
+            /tmp/dovifuse-report-controls-*/*.json
+            /tmp/dovifuse-report-controls-*/*.log
+            /tmp/dovifuse-faults-*/summary.json
+            /tmp/dovifuse-faults-*/*/*.log
+            /tmp/dovifuse-faults-*/*/report.json
+            /tmp/dovifuse-preservation-*/*.log
+            /tmp/dovifuse-preservation-*/summary.json
+            /tmp/dovifuse-l5-audit-*/*.log
+            /tmp/dovifuse-l5-audit-*/summary.json
+            /tmp/dovifuse-donor-eligibility-*/*.log
+            /tmp/dovifuse-donor-eligibility-*/summary.json
+            /tmp/dovifuse-donor-eligibility-*/*.report.json
+            /tmp/dovifuse-mapping-*/*.log
+            /tmp/dovifuse-mapping-*/summary.json
+            /tmp/dovifuse-metadata-*/summary.json
+            /tmp/dovifuse-metadata-*/*.log
+            /tmp/dovifuse-metadata-*/*.report.json
+            /tmp/dovifuse-temporal-*/*.log
+            /tmp/dovifuse-temporal-*/*.json
+            /tmp/dovifuse-picture-coverage-*/*.log
+            /tmp/dovifuse-picture-coverage-*/*.json
+            /tmp/dovifuse-reuse-*/summary.json
+            /tmp/dovifuse-reuse-*/*.log
+            /tmp/dovifuse-reuse-*/report.json
+            /tmp/dovifuse-mapping-*/*.report.json
 
       - name: Record acceptance status
         run: |
-          python3 scripts/verify_reference_catalog.py > /tmp/dv8-acceptance.json
+          python3 scripts/verify_reference_catalog.py > /tmp/dovifuse-acceptance.json
           {
             echo '### Release acceptance'
             echo 'Downloads require passing build and regression checks.'
             echo 'The validated channel additionally requires all acceptance evidence.'
             echo '```json'
-            cat /tmp/dv8-acceptance.json
+            cat /tmp/dovifuse-acceptance.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -207,10 +207,10 @@ jobs:
         with:
           name: macos-release
           path: |
-            dist/DV8-Maker-arm64.dmg
-            dist/DV8-Maker-arm64.dmg.sha256
-            dist/DV8-Maker-sources.tar.gz
-            dist/DV8-Maker-sources.tar.gz.sha256
+            dist/DoviFuse-arm64.dmg
+            dist/DoviFuse-arm64.dmg.sha256
+            dist/DoviFuse-sources.tar.gz
+            dist/DoviFuse-sources.tar.gz.sha256
           if-no-files-found: error
 
   publish:

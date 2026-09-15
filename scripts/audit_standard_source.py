@@ -10,13 +10,13 @@ import tempfile
 from audit_fixtures import sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-RESOURCES = Path(os.environ.get('DV8_AUDIT_RESOURCES', ROOT))
-BIN = Path(os.environ.get('DV8_AUDIT_BIN', ROOT/'dv8_converter/target/debug/dv8_converter'))
-SEEDS = Path(os.environ['DV8_AUDIT_FIXTURES'])
-WORK = Path(tempfile.mkdtemp(prefix='dv8-standard-source-'))
-ENV = dict(os.environ, DV8_SCRIPT_DIR=str(RESOURCES),
-           DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'),
-           DV8_EL_RPU_DIR=str(WORK/'unused-environment-destination'))
+RESOURCES = Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES', ROOT))
+BIN = Path(os.environ.get('DOVIFUSE_AUDIT_BIN', ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+SEEDS = Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+WORK = Path(tempfile.mkdtemp(prefix='dovifuse-standard-source-'))
+ENV = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(RESOURCES),
+           DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'),
+           DOVIFUSE_EL_RPU_DIR=str(WORK/'unused-environment-destination'))
 DOVI = RESOURCES/'tools/dovi_tool'
 manifest = json.loads((SEEDS/'manifest.json').read_text())
 assert manifest['kind'] == 'synthetic-mechanics-only'
@@ -64,7 +64,7 @@ for label, payload, kind in [('mel', mel*259, 'MEL'), ('fel', fel*259, 'FEL'), (
     assert report['validation']=='warn' and sha256(source)!=original
     archived = archive/(label+'.DV7.EL_RPU.hevc')
     assert sha256(archived)==sha256(expected_archive)
-    assert not Path(ENV['DV8_EL_RPU_DIR']).exists(), 'CLI destination must override environment'
+    assert not Path(ENV['DOVIFUSE_EL_RPU_DIR']).exists(), 'CLI destination must override environment'
     results[label] = {'type':kind, 'archive_payload_sha256':sha256(archived), 'validation':'warn'}
 
 # Existing archive collision must not replace the source or the archive.
@@ -77,6 +77,6 @@ assert sha256(source)==before and sentinel.read_bytes()==b'existing archive'
 assert not (WORK/'collision.DV8_TMP.mkv').exists()
 report = convert(source, 'archive-disabled', ['-n'])
 assert next(m['value'] for m in report['measurements'] if m['key']=='source_enhancement_layer')['archive_enabled'] is False
-assert not Path(ENV['DV8_EL_RPU_DIR']).exists()
+assert not Path(ENV['DOVIFUSE_EL_RPU_DIR']).exists()
 assert sha256(SEEDS/'p7.mkv')==manifest['sha256']['p7.mkv']
 print('Standard source/archive controls passed:', WORK, json.dumps(results))

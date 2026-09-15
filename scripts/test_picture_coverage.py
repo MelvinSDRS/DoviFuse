@@ -10,16 +10,16 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RES = Path(os.environ.get('DV8_AUDIT_RESOURCES', ROOT))
-BIN = Path(os.environ.get('DV8_AUDIT_BIN', ROOT/'dv8_converter/target/debug/dv8_converter'))
-SEEDS = Path(os.environ['DV8_AUDIT_FIXTURES'])
-WORK = Path(tempfile.mkdtemp(prefix='dv8-picture-coverage-', dir='/tmp'))
-ENV = dict(os.environ, DV8_SCRIPT_DIR=str(RES), DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+RES = Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES', ROOT))
+BIN = Path(os.environ.get('DOVIFUSE_AUDIT_BIN', ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+SEEDS = Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+WORK = Path(tempfile.mkdtemp(prefix='dovifuse-picture-coverage-', dir='/tmp'))
+ENV = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(RES), DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 ENV['PATH'] += os.pathsep + str(RES/'tools')
 FF = RES/'tools/ffmpeg'
 DOVI = shutil.which('dovi_tool', path=ENV['PATH'])
 RESULTS = []
-PREPARED = Path(os.environ.get('DV8_PICTURE_FIXTURES', SEEDS/'picture-coverage'))
+PREPARED = Path(os.environ.get('DOVIFUSE_PICTURE_FIXTURES', SEEDS/'picture-coverage'))
 
 
 def run(args, name, success=True, env=ENV):
@@ -135,8 +135,8 @@ fault = WORK/'fault-tools'
 fault.mkdir()
 wrapper = fault/'ffmpeg'
 wrapper.write_text('#!'+sys.executable+'\nimport os,re,subprocess,sys\nfrom pathlib import Path\nargs=sys.argv[1:]\n'
-    'if os.environ.get("DV8_TEST_CROP_FAILURE") and "-vf" in args and "cropdetect" in args[args.index("-vf")+1]:\n'
-    ' marker=Path(os.environ["DV8_TEST_CROP_FAILURE"])\n count=int(marker.read_text())+1 if marker.exists() else 1\n marker.write_text(str(count))\n'
+    'if os.environ.get("DOVIFUSE_TEST_CROP_FAILURE") and "-vf" in args and "cropdetect" in args[args.index("-vf")+1]:\n'
+    ' marker=Path(os.environ["DOVIFUSE_TEST_CROP_FAILURE"])\n count=int(marker.read_text())+1 if marker.exists() else 1\n marker.write_text(str(count))\n'
     ' if count==4: sys.stderr.write("injected crop decoder failure\\n"); sys.exit(19)\n'
     'if "-vf" in args and "signalstats" in args[args.index("-vf")+1] and any(a.endswith("leading-dv.mkv") for a in args):\n'
     ' p=subprocess.run(['+repr(str(FF))+']+args,capture_output=True,text=True)\n'
@@ -149,13 +149,13 @@ fault_res = WORK/'fault-resources'
 (fault_res/'tools').mkdir(parents=True)
 (fault_res/'tools/ffmpeg').symlink_to(wrapper)
 (fault_res/'config').symlink_to(RES/'config', target_is_directory=True)
-fault_env = dict(ENV, PATH=str(fault)+os.pathsep+ENV['PATH'], DV8_SCRIPT_DIR=str(fault_res))
+fault_env = dict(ENV, PATH=str(fault)+os.pathsep+ENV['PATH'], DOVIFUSE_SCRIPT_DIR=str(fault_res))
 p, data = convert('missing-full-overlap', donor='leading-dv.mkv', flags=['--offset', '120', '--letterbox', 'off', '--grade-check', 'full'], success=False, env=fault_env)
 assert 'coverage' in (p.stdout+p.stderr).lower() or 'incomplete' in (p.stdout+p.stderr).lower()
 p, data = convert('implausible-geometry', target='dark-object.mkv', flags=['--skip-grade-check'], success=False)
 assert 'Active-area' in p.stdout+p.stderr or 'crop' in p.stdout+p.stderr
 p, data = convert('geometry-decoder-error', flags=['--skip-grade-check'], success=False,
-                  env=dict(fault_env, DV8_TEST_CROP_FAILURE=str(WORK/'crop-count')))
+                  env=dict(fault_env, DOVIFUSE_TEST_CROP_FAILURE=str(WORK/'crop-count')))
 assert 'cropdetect failed' in p.stdout+p.stderr
 p = run([BIN, '--hybrid', '--letterbox', 'resolution', WORK/'dv.mkv', WORK/'hdr.mkv'], 'resolution-guess-refused', False)
 assert 'scaling' in p.stdout+p.stderr

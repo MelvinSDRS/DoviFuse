@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-config = json.loads(Path(os.environ['DV8_FAULT_CONFIG']).read_text())
+config = json.loads(Path(os.environ['DOVIFUSE_FAULT_CONFIG']).read_text())
 tool = Path(sys.argv[0]).name
 args = sys.argv[1:]
 real = config['tools'][tool]

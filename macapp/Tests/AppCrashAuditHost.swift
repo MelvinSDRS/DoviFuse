@@ -6,8 +6,8 @@ import AppKit
 struct AppCrashAuditHost {
     @MainActor
     static func main() throws {
-        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["DV8_NATIVE_AUDIT_ROOT"]!)
-        let preferences = UserDefaults(suiteName: "DV8CrashAudit-" + root.lastPathComponent)!
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["DOVIFUSE_NATIVE_AUDIT_ROOT"]!)
+        let preferences = UserDefaults(suiteName: "DoviFuseCrashAudit-" + root.lastPathComponent)!
         let model = AppModel(preferences: preferences)
         model.mode = .standard
         model.hardware = .off
@@ -18,7 +18,7 @@ struct AppCrashAuditHost {
         app.setActivationPolicy(.accessory)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 100),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "DV8 isolated interruption audit"
+        window.title = "DoviFuse isolated interruption audit"
         window.orderFront(nil)
         if CommandLine.arguments.contains("--run") {
             model.run()

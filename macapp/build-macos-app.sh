@@ -40,8 +40,8 @@ fi
 export RUSTUP_TOOLCHAIN=1.98.1
 rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
 export RUSTFLAGS="-C target-cpu=apple-m1"
-cargo build --locked --release --manifest-path "$ROOT/dv8_converter/Cargo.toml"
-cargo build --locked --release --manifest-path "$ROOT/dv8_converter/Cargo.toml" --example l5_timeline
+cargo build --locked --release --manifest-path "$ROOT/dovifuse_converter/Cargo.toml"
+cargo build --locked --release --manifest-path "$ROOT/dovifuse_converter/Cargo.toml" --example l5_timeline
 cargo build --locked --release --manifest-path "$ROOT/dovi_tool/Cargo.toml" --no-default-features --features internal-font
 
 FFMPEG_KEY=$(/usr/bin/shasum -a 256 "$ROOT/macapp/build-macos-app.sh" | cut -c1-20)
@@ -102,17 +102,17 @@ if [[ -z $MEDIAINFO_BIN ]]; then
 fi
 
 rm -rf "$DERIVED"
-xcodebuild -project "$ROOT/macapp/DV8Maker.xcodeproj" -scheme DV8Maker \
+xcodebuild -project "$ROOT/macapp/DoviFuse.xcodeproj" -scheme DoviFuse \
   -configuration Release -derivedDataPath "$DERIVED" CODE_SIGNING_ALLOWED=NO build
 
-APP="$DIST/DV8 Maker.app"
+APP="$DIST/DoviFuse.app"
 rm -rf "$APP"
-cp -R "$DERIVED/Build/Products/Release/DV8 Maker.app" "$APP"
+cp -R "$DERIVED/Build/Products/Release/DoviFuse.app" "$APP"
 RESOURCES="$APP/Contents/Resources"
 TOOLS="$RESOURCES/tools"
 mkdir -p "$TOOLS" "$RESOURCES/vendor" "$RESOURCES/config" "$RESOURCES/licenses"
 
-cp "$ROOT/dv8_converter/target/release/dv8_converter" "$TOOLS/dv8_converter"
+cp "$ROOT/dovifuse_converter/target/release/dovifuse_converter" "$TOOLS/dovifuse_converter"
 cp "$ROOT/dovi_tool/target/release/dovi_tool" "$TOOLS/dovi_tool"
 cp "$FFMPEG_PREFIX/bin/ffmpeg" "$TOOLS/ffmpeg"
 cp "$FFMPEG_PREFIX/bin/ffprobe" "$TOOLS/ffprobe"
@@ -120,24 +120,24 @@ cp "$MEDIAINFO_BIN" "$TOOLS/mediainfo"
 cp "$ROOT/macapp/wrappers/mkvmerge" "$TOOLS/mkvmerge"
 cp "$ROOT/macapp/wrappers/mkvextract" "$TOOLS/mkvextract"
 cp -R "$MKV_MOUNT/MKVToolNix.app/Contents/MacOS" "$RESOURCES/vendor/MKVToolNix"
-cp "$ROOT/config/DV7toDV8.json" "$RESOURCES/config/DV7toDV8.json"
+cp "$ROOT/config/dovifuse.json" "$RESOURCES/config/dovifuse.json"
 
 cp "$ROOT/dovi_tool/LICENSE" "$RESOURCES/licenses/dovi_tool-MIT.txt"
 cp "$MKV_MOUNT/COPYING.txt" "$RESOURCES/licenses/MKVToolNix-GPL.txt"
 cp "$MEDIAINFO_MOUNT/License.html" "$RESOURCES/licenses/MediaInfo-License.html"
 cp "$FFMPEG_SOURCE/COPYING.GPLv3" "$RESOURCES/licenses/FFmpeg-GPLv3.txt"
-cp "$ROOT/LICENSE" "$RESOURCES/licenses/DV8-MIT.txt"
+cp "$ROOT/LICENSE" "$RESOURCES/licenses/DoviFuse-MIT.txt"
 /usr/bin/python3 "$ROOT/macapp/bundle-rust-licenses.py" "$RESOURCES"
 chmod +x "$TOOLS"/* "$RESOURCES/vendor/MKVToolNix"/mkvmerge "$RESOURCES/vendor/MKVToolNix"/mkvextract
 
-for tool in dv8_converter dovi_tool mediainfo; do
+for tool in dovifuse_converter dovi_tool mediainfo; do
   if ! file "$TOOLS/$tool" | grep -q 'arm64'; then
     echo "$tool is not an arm64 executable" >&2
     exit 1
   fi
 done
 
-"$TOOLS/dv8_converter" --help >/dev/null
+"$TOOLS/dovifuse_converter" --help >/dev/null
 for tool in dovi_tool mediainfo mkvmerge mkvextract; do
   "$TOOLS/$tool" --version >/dev/null
 done

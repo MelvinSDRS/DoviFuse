@@ -146,13 +146,13 @@ impl Default for HybridOptions {
 
 pub(crate) fn usage() {
     println!(
-        "Usage: DV7toDV8.sh [OPTIONS] <file.mkv|directory>\n\
+        "Usage: DoviFuse.sh [OPTIONS] <file.mkv|directory>\n\
 \n\
 Convert Dolby Vision Profile 7 MKV files to Profile 8.\n\
 \n\
 Options:\n\
   -n          Do NOT save the DV7 EL+RPU file (default: archived to NAS)\n\
-  --archive-dir <path>  Standard-mode EL+RPU destination (overrides DV8_EL_RPU_DIR)\n\
+  --archive-dir <path>  Standard-mode EL+RPU destination (overrides DOVIFUSE_EL_RPU_DIR)\n\
   -d, --debug Enable debug logging (verbose + command logging)\n\
   --dry-run   Show what would be done without modifying any files\n\
   --tmp-dir <path>  Store large intermediate files in this directory\n\
@@ -189,14 +189,14 @@ Hybrid-only options:\n\
                     HDR target, default), off (keep RPU L5 as-is)\n\
 \n\
 Examples:\n\
-  DV7toDV8.sh /path/to/movie.mkv\n\
-  DV7toDV8.sh /path/to/folder/\n\
-  DV7toDV8.sh -n /path/to/movie.mkv\n\
-  DV7toDV8.sh --check /path/to/downloaded.dv8.mkv\n\
+  DoviFuse.sh /path/to/movie.mkv\n\
+  DoviFuse.sh /path/to/folder/\n\
+  DoviFuse.sh -n /path/to/movie.mkv\n\
+  DoviFuse.sh --check /path/to/downloaded.dv8.mkv\n\
 \n\
 Hybrid mode (inject DV metadata from one file into another):\n\
-  DV7toDV8.sh --hybrid <dv_source.mkv> <hdr_target.mkv>\n\
-  DV7toDV8.sh --hybrid -o output.mkv <dv_source.mkv> <hdr_target.mkv>"
+  DoviFuse.sh --hybrid <dv_source.mkv> <hdr_target.mkv>\n\
+  DoviFuse.sh --hybrid -o output.mkv <dv_source.mkv> <hdr_target.mkv>"
     );
 }
 
@@ -214,14 +214,16 @@ fn parse_args_from(original_args: Vec<String>) -> AppResult<CliArgs> {
     let mut report = None;
     let mut repair_sync_offset: Option<i64> = None;
     let mut custom_output: Option<PathBuf> = None;
-    let mut tmp_dir = env::var_os("DV8_TMP_DIR").map(PathBuf::from);
+    let mut tmp_dir = env::var_os("DOVIFUSE_TMP_DIR")
+        .or_else(|| env::var_os("DV8_TMP_DIR"))
+        .map(PathBuf::from);
     let mut hwaccel = HwAccelMode::Auto;
     let mut progress = ProgressMode::Human;
     let mut hybrid = HybridOptions::default();
     let mut hybrid_only_flags: Vec<String> = Vec::new();
 
     let mut positional: Vec<String> = Vec::new();
-    let args: Vec<String> = std::iter::once("dv8_converter".to_string())
+    let args: Vec<String> = std::iter::once("dovifuse_converter".to_string())
         .chain(original_args.iter().cloned())
         .collect();
 

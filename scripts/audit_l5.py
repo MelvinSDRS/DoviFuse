@@ -11,12 +11,12 @@ import sys
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-WORK=Path(tempfile.mkdtemp(prefix='dv8-l5-audit-',dir='/tmp'))
-RES=Path(os.environ.get('DV8_AUDIT_RESOURCES',ROOT))
-BIN=Path(os.environ.get('DV8_AUDIT_BIN',ROOT/'dv8_converter/target/debug/dv8_converter'))
-L5=Path(os.environ.get('DV8_L5_TIMELINE_BIN',ROOT/'dv8_converter/target/debug/examples/l5_timeline'))
-SEEDS=Path(os.environ['DV8_AUDIT_FIXTURES'])
-ENV=dict(os.environ,DV8_SCRIPT_DIR=str(RES),DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+WORK=Path(tempfile.mkdtemp(prefix='dovifuse-l5-audit-',dir='/tmp'))
+RES=Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES',ROOT))
+BIN=Path(os.environ.get('DOVIFUSE_AUDIT_BIN',ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+L5=Path(os.environ.get('DOVIFUSE_L5_TIMELINE_BIN',ROOT/'dovifuse_converter/target/debug/examples/l5_timeline'))
+SEEDS=Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+ENV=dict(os.environ,DOVIFUSE_SCRIPT_DIR=str(RES),DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 ENV['PATH']=ENV.get('PATH','')+os.pathsep+str(RES/'tools')
 
 def require(v,message):
@@ -82,7 +82,7 @@ hashes=[sha(donor),sha(target)]
 fault_resources=WORK/'fault-resources';(fault_resources/'tools').mkdir(parents=True)
 (fault_resources/'tools/dovi_tool').symlink_to(wrapper)
 (fault_resources/'config').symlink_to(RES/'config',target_is_directory=True)
-fault_env=dict(ENV,PATH=str(fault)+os.pathsep+ENV['PATH'],DV8_SCRIPT_DIR=str(fault_resources))
+fault_env=dict(ENV,PATH=str(fault)+os.pathsep+ENV['PATH'],DOVIFUSE_SCRIPT_DIR=str(fault_resources))
 p=run([BIN,'--progress','jsonl','--hybrid','--letterbox','off','--delete-sources','-o',WORK/'output.mkv',donor,target],'output-l5-loss',False,fault_env)
 require('Output L5 frame intervals differ' in p.stdout+p.stderr,'Wrong output L5 guard failure')
 require([sha(donor),sha(target)]==hashes,'Sources changed on L5 failure')

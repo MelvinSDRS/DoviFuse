@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-tool metadata transport controls on the disposable DV8 seed media.
+"""Real-tool metadata transport controls on the disposable DoviFuse seed media.
 
 This test deliberately does not encode video.  It uses the checked-in audit
 seed, dovi_tool, mkvextract, and mkvmerge to exercise the RPU transport
@@ -33,20 +33,20 @@ from typing import Any, Iterable, Mapping
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESOURCES = Path(os.environ.get("DV8_AUDIT_RESOURCES", ROOT))
-BIN = Path(os.environ.get("DV8_AUDIT_BIN", ROOT / "dv8_converter/target/debug/dv8_converter"))
-SEEDS = Path(os.environ["DV8_AUDIT_FIXTURES"])
-WORK = Path(tempfile.mkdtemp(prefix="dv8-metadata-transport-", dir="/tmp"))
+RESOURCES = Path(os.environ.get("DOVIFUSE_AUDIT_RESOURCES", ROOT))
+BIN = Path(os.environ.get("DOVIFUSE_AUDIT_BIN", ROOT / "dovifuse_converter/target/debug/dovifuse_converter"))
+SEEDS = Path(os.environ["DOVIFUSE_AUDIT_FIXTURES"])
+WORK = Path(tempfile.mkdtemp(prefix="dovifuse-metadata-transport-", dir="/tmp"))
 ENV = dict(
     os.environ,
-    DV8_SCRIPT_DIR=str(RESOURCES),
-    DV8_PROCESSING_LOG_FILE=str(WORK / "processing.log"),
+    DOVIFUSE_SCRIPT_DIR=str(RESOURCES),
+    DOVIFUSE_PROCESSING_LOG_FILE=str(WORK / "processing.log"),
 )
 ENV["PATH"] = ENV.get("PATH", "") + os.pathsep + str(RESOURCES / "tools")
 
 
 def executable(name: str) -> Path:
-    override = os.environ.get(f"DV8_METADATA_{name.upper()}")
+    override = os.environ.get(f"DOVIFUSE_METADATA_{name.upper()}")
     if override:
         return Path(override)
     found = shutil.which(name, path=ENV["PATH"])
@@ -345,7 +345,7 @@ def make_fault_resources(name: str, mutation: Path, *, operation: str) -> tuple[
     (resources / "tools").mkdir(parents=True)
     (resources / "tools" / "dovi_tool").symlink_to(wrapper)
     (resources / "config").symlink_to(RESOURCES / "config", target_is_directory=True)
-    env = dict(ENV, DV8_SCRIPT_DIR=str(resources), PATH=str(fault_dir) + os.pathsep + ENV["PATH"])
+    env = dict(ENV, DOVIFUSE_SCRIPT_DIR=str(resources), PATH=str(fault_dir) + os.pathsep + ENV["PATH"])
     return resources, env
 
 
@@ -426,7 +426,7 @@ def main() -> None:
     parser.add_argument(
         "--baseline",
         action="store_true",
-        help="Run only the pre-fix L6 regression against DV8_METADATA_BASELINE_BIN or DV8_AUDIT_BIN",
+        help="Run only the pre-fix L6 regression against DOVIFUSE_METADATA_BASELINE_BIN or DOVIFUSE_AUDIT_BIN",
     )
     args = parser.parse_args()
 
@@ -504,7 +504,7 @@ def main() -> None:
     if args.baseline:
         # This deliberately describes the known old behavior and therefore
         # must be run with the pre-transport-fix executable.
-        baseline_bin = Path(os.environ.get("DV8_METADATA_BASELINE_BIN", str(BIN)))
+        baseline_bin = Path(os.environ.get("DOVIFUSE_METADATA_BASELINE_BIN", str(BIN)))
         _, baseline_output, baseline_report = convert(
             rich_donor,
             WORK / "hdr.mkv",

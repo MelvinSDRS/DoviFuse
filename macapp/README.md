@@ -1,6 +1,6 @@
-# DV8 Maker for macOS
+# DoviFuse for macOS
 
-`DV8 Maker` is a native Apple Silicon SwiftUI front end for the repository's
+`DoviFuse` is a native Apple Silicon SwiftUI front end for the repository's
 standard and hybrid conversion modes. It stores large intermediates in a
 user-selected external-SSD folder and bundles every runtime command-line tool.
 
@@ -11,7 +11,7 @@ DEVELOPER_DIR="$(xcode-select -p)" ./macapp/build-macos-app.sh
 ```
 
 The reproducible build cache is written to `.macos-build-cache/`; the finished,
-ad-hoc-signed application is `dist/DV8 Maker.app`. Homebrew is not required at
+ad-hoc-signed application is `dist/DoviFuse.app`. Homebrew is not required at
 build or runtime. The app bundles FFmpeg/ffprobe, dovi_tool, MKVToolNix and
 MediaInfo. Connect the server share in Finder, choose a scratch folder on the
 external SSD and drop the MKV inputs into the appropriate zones.
@@ -41,7 +41,7 @@ Create the distributable disk image after building:
 ./macapp/create-dmg.sh
 ```
 
-The result is `dist/DV8-Maker-arm64.dmg` with a matching SHA-256 file. Pushes to
+The result is `dist/DoviFuse-arm64.dmg` with a matching SHA-256 file. Pushes to
 `main` run `.github/workflows/release-macos.yml`. After Linux regressions,
 packaged Mac tests, and DMG verification pass, a separate publishing job creates
 a regular release with the DMG, portable SHA-256 checksums, and the
@@ -60,9 +60,14 @@ playback acceptance and notarization are separate from a successful automated
 build.
 
 Job reports are saved automatically under
-`~/Library/Application Support/DV8 Maker/Reports/` and can be revealed with
+`~/Library/Application Support/DoviFuse/Reports/` and can be revealed with
 **Show report**. Final UI state waits for process exit and both output streams to
 finish; an absent or inconsistent saved report is an error. Repair eligibility
 is bound to the checked file's path, size, inode, device, mtime and ctime. Changing
 or replacing the input requires another check. These identities are filesystem
 observations, not content hashes.
+
+The bundle identifier remains `com.melvinsiadous.DV8Maker` so existing macOS
+preferences and security-scoped bookmarks continue to work after the rename.
+On first launch, an existing `Application Support/DV8 Maker` directory is moved
+to the new DoviFuse location so saved reports remain available.

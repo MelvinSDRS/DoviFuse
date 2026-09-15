@@ -104,6 +104,7 @@ final class AppModel: ObservableObject {
     private let hardwareKey = "hardwareMode"
     private let archiveEnabledKey = "saveEnhancementLayer"
     private let archiveBookmarkKey = "archiveBookmark"
+    private let supportDirectoryName = "DoviFuse"
     private let preferences: UserDefaults
 
     init(preferences: UserDefaults = .standard) {
@@ -292,14 +293,14 @@ final class AppModel: ObservableObject {
         operation: RunningOperation
     ) {
         let resources = Bundle.main.resourceURL!
-        let executable = resources.appendingPathComponent("tools/dv8_converter")
+        let executable = resources.appendingPathComponent("tools/dovifuse_converter")
         guard FileManager.default.isExecutableFile(atPath: executable.path) else {
             errorMessage = "The bundled converter is missing. Rebuild the app package."
             return
         }
 
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("DV8 Maker", isDirectory: true)
+            .appendingPathComponent(supportDirectoryName, isDirectory: true)
         let logs = support.appendingPathComponent("Logs", isDirectory: true)
         let reports = support.appendingPathComponent("Reports", isDirectory: true)
         do {
@@ -316,8 +317,8 @@ final class AppModel: ObservableObject {
         process.arguments = ["--report", report.path] + args
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
-        environment["DV8_SCRIPT_DIR"] = resources.path
-        environment["DV8_PROCESSING_LOG_FILE"] = logs.appendingPathComponent("processing_log.txt").path
+        environment["DOVIFUSE_SCRIPT_DIR"] = resources.path
+        environment["DOVIFUSE_PROCESSING_LOG_FILE"] = logs.appendingPathComponent("processing_log.txt").path
         process.environment = environment
         let stdout = Pipe(), stderr = Pipe()
         process.standardOutput = stdout
@@ -356,6 +357,22 @@ final class AppModel: ObservableObject {
                 }
             }
         } catch { errorMessage = "Could not start operation: \(error.localizedDescription)" }
+    }
+
+    static func migrateLegacySupportDirectory(applicationSupport: URL? = nil) {
+        let fileManager = FileManager.default
+        guard let applicationSupport = applicationSupport ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return
+        }
+        let legacy = applicationSupport.appendingPathComponent("DV8 Maker", isDirectory: true)
+        let current = applicationSupport.appendingPathComponent("DoviFuse", isDirectory: true)
+        guard fileManager.fileExists(atPath: legacy.path), !fileManager.fileExists(atPath: current.path) else {
+            return
+        }
+        // Keep existing reports and logs available after the display-name rename.
+        // If the move fails, the old directory remains intact and new runs use the
+        // new location.
+        try? fileManager.moveItem(at: legacy, to: current)
     }
 
     func cancel() {

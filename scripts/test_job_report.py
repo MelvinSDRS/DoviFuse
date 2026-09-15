@@ -11,11 +11,11 @@ import sys
 import tempfile
 import time
 ROOT=Path(__file__).resolve().parents[1]
-WORK=Path(tempfile.mkdtemp(prefix='dv8-report-controls-',dir='/tmp'))
-RES=Path(os.environ.get('DV8_AUDIT_RESOURCES',ROOT))
-BIN=Path(os.environ.get('DV8_AUDIT_BIN',ROOT/'dv8_converter/target/debug/dv8_converter'))
-SEEDS=Path(os.environ['DV8_AUDIT_FIXTURES'])
-ENV=dict(os.environ,DV8_SCRIPT_DIR=str(RES),DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+WORK=Path(tempfile.mkdtemp(prefix='dovifuse-report-controls-',dir='/tmp'))
+RES=Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES',ROOT))
+BIN=Path(os.environ.get('DOVIFUSE_AUDIT_BIN',ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+SEEDS=Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+ENV=dict(os.environ,DOVIFUSE_SCRIPT_DIR=str(RES),DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 source=WORK/'source.mkv';shutil.copyfile(SEEDS/'dv.mkv',source)
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 original=sha(source)
@@ -39,7 +39,7 @@ run('directory',['--check','--report',WORK,source],False)
 # Valid CLI with unusable tool runtime still leaves a failed, readable report.
 fake=WORK/'empty';fake.mkdir()
 runtime=WORK/'runtime.json'
-run('runtime',['--check','--report',runtime,source],False,dict(ENV,PATH=str(fake),DV8_SCRIPT_DIR=str(fake)))
+run('runtime',['--check','--report',runtime,source],False,dict(ENV,PATH=str(fake),DOVIFUSE_SCRIPT_DIR=str(fake)))
 assert json.loads(runtime.read_text())['execution']=='failed'
 # Dry runs record planned output identity and cannot validate actual media.
 dry=WORK/'dry.json'

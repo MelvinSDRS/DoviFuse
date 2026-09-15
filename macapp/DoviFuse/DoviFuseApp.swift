@@ -1,11 +1,15 @@
 import SwiftUI
 
 @main
-struct DV8MakerApp: App {
+struct DoviFuseApp: App {
     @StateObject private var model = AppModel()
 
+    init() {
+        AppModel.migrateLegacySupportDirectory()
+    }
+
     var body: some Scene {
-        WindowGroup("DV8 Maker") {
+        WindowGroup("DoviFuse") {
             ContentView(model: model)
                 .frame(minWidth: 760, minHeight: 540)
         }

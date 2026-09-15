@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Create the corresponding-source bundle for a DV8 Maker release.
+"""Create the corresponding-source bundle for a DoviFuse release.
 
 The app build downloads FFmpeg and the official MKVToolNix macOS package. A
 release must make the exact source used for FFmpeg available and provide the
 corresponding upstream MKVToolNix source archive. This script deliberately
-keeps those source artifacts separate from the tracked DV8 and pinned
+keeps those source artifacts separate from the tracked DoviFuse and pinned
 dovi_tool git archives so that an archive can be inspected or rebuilt on
 another host.
 """
@@ -166,7 +166,7 @@ def _download_mkv_source(
         ) as destination:
             temporary = Path(destination.name)
             request = Request(
-                url, headers={"User-Agent": "DV8-Maker release source packager"}
+                url, headers={"User-Agent": "DoviFuse release source packager"}
             )
             with urlopen(request, timeout=60) as response:
                 while chunk := response.read(1024 * 1024):
@@ -242,29 +242,29 @@ def _manifest_line(component: str, path: Path, provenance: str) -> str:
 def _write_bundle_notes(
     path: Path,
     *,
-    dv8_revision: str,
+    dovifuse_revision: str,
     dovi_revision: str,
     ffmpeg_sha256: str,
     mkv_sha256: str,
     component_lines: Iterable[str],
 ) -> None:
     path.write_text(
-        """DV8 Maker corresponding-source bundle
+        """DoviFuse corresponding-source bundle
 =========================================
 
-This archive accompanies an automated Apple Silicon DV8 Maker build. It
-contains tracked DV8 Maker source at the release commit, the pinned dovi_tool
+This archive accompanies an automated Apple Silicon DoviFuse build. It
+contains tracked DoviFuse source at the release commit, the pinned dovi_tool
 source checkout, the exact FFmpeg source archive used by the macOS build, and
 the official MKVToolNix source archive corresponding to the upstream macOS
 package version used by that build.
 
-The DV8 Maker and dovi_tool entries are git archives: they intentionally omit
+The DoviFuse and dovi_tool entries are git archives: they intentionally omit
 .git directories, ignored files, local .env files, build caches, logs, and
 verification evidence. The release checkout commit and dovi_tool revision
 are recorded below so the archives can be checked independently.
 
-DV8 Maker git repository: https://github.com/MelvinSDRS/DV8
-DV8 Maker release commit: {dv8_revision}
+DoviFuse git repository: https://github.com/MelvinSDRS/DoviFuse
+DoviFuse release commit: {dovifuse_revision}
 dovi_tool repository: {dovi_repository}
 dovi_tool pinned revision: {dovi_revision}
 
@@ -299,9 +299,9 @@ Component SHA-256 manifest
 --------------------------
 component	sha256	archive	provenance
 {component_lines}For the outer release archive, verify the adjacent
-DV8-Maker-sources.tar.gz.sha256 file.
+DoviFuse-sources.tar.gz.sha256 file.
 """.format(
-            dv8_revision=dv8_revision,
+            dovifuse_revision=dovifuse_revision,
             dovi_repository=DOVI_REPOSITORY,
             dovi_revision=dovi_revision,
             ffmpeg_version=FFMPEG_VERSION,
@@ -338,10 +338,10 @@ def package_sources(
     output = output.resolve()
     dovi_root = root / "dovi_tool"
     if not root.is_dir():
-        raise SourceBundleError(f"Missing DV8 Maker repository: {root}")
+        raise SourceBundleError(f"Missing DoviFuse repository: {root}")
     if _run_git(root, "rev-parse", "--show-toplevel") != str(root):
         raise SourceBundleError(f"Not a git checkout at repository root: {root}")
-    dv8_revision = _run_git(root, "rev-parse", "HEAD")
+    dovifuse_revision = _run_git(root, "rev-parse", "HEAD")
 
     if not dovi_root.is_dir():
         raise SourceBundleError(
@@ -390,13 +390,13 @@ def package_sources(
     if output.exists() and not output.is_dir():
         raise SourceBundleError(f"Release output is not a directory: {output}")
     output.mkdir(parents=True, exist_ok=True)
-    outer = output / "DV8-Maker-sources.tar.gz"
-    checksum_file = output / "DV8-Maker-sources.tar.gz.sha256"
+    outer = output / "DoviFuse-sources.tar.gz"
+    checksum_file = output / "DoviFuse-sources.tar.gz.sha256"
 
     with tempfile.TemporaryDirectory(
-        prefix=".dv8-source-bundle-", dir=output
+        prefix=".dovifuse-source-bundle-", dir=output
     ) as temporary:
-        stage = Path(temporary) / "DV8-Maker-sources"
+        stage = Path(temporary) / "DoviFuse-sources"
         stage.mkdir()
         ffmpeg_copy = stage / FFMPEG_ARCHIVE_NAME
         mkv_copy = stage / MKV_SOURCE_ARCHIVE_NAME
@@ -410,14 +410,14 @@ def package_sources(
             dovi_copy,
             f"dovi_tool-{dovi_revision}",
         )
-        dv8_copy = stage / f"DV8-Maker-{dv8_revision}.tar"
-        _git_archive(root, "HEAD", dv8_copy, f"DV8-Maker-{dv8_revision}")
+        dovifuse_copy = stage / f"DoviFuse-{dovifuse_revision}.tar"
+        _git_archive(root, "HEAD", dovifuse_copy, f"DoviFuse-{dovifuse_revision}")
 
         lines = [
             _manifest_line(
-                "DV8 Maker",
-                dv8_copy,
-                f"git archive of https://github.com/MelvinSDRS/DV8 at {dv8_revision}",
+                "DoviFuse",
+                dovifuse_copy,
+                f"git archive of https://github.com/MelvinSDRS/DoviFuse at {dovifuse_revision}",
             ),
             _manifest_line(
                 "dovi_tool",
@@ -429,7 +429,7 @@ def package_sources(
         ]
         _write_bundle_notes(
             stage / "SOURCE-BUNDLE-README.txt",
-            dv8_revision=dv8_revision,
+            dovifuse_revision=dovifuse_revision,
             dovi_revision=dovi_revision,
             ffmpeg_sha256=ffmpeg_expected_sha256,
             mkv_sha256=mkv_expected_sha256,
@@ -443,8 +443,8 @@ def package_sources(
             archive.add(stage, arcname=stage.name, recursive=True)
         _validate_tar(
             temporary_outer,
-            "DV8 Maker source bundle",
-            "DV8-Maker-sources",
+            "DoviFuse source bundle",
+            "DoviFuse-sources",
         )
 
         digest = sha256(temporary_outer)
@@ -467,7 +467,7 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         required=True,
-        help="directory receiving DV8-Maker-sources.tar.gz and its .sha256 file",
+        help="directory receiving DoviFuse-sources.tar.gz and its .sha256 file",
     )
     parser.add_argument(
         "--cache",

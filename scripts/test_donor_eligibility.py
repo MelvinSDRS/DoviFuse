@@ -9,10 +9,10 @@ encode video.
 Prepare once with::
 
     python3 scripts/test_donor_eligibility.py --prepare DIR \
-        --base-fixtures "$DV8_AUDIT_FIXTURES"
+        --base-fixtures "$DOVIFUSE_AUDIT_FIXTURES"
 
-Run with ``DV8_DONOR_ELIGIBILITY_FIXTURES=DIR``.  The regular audit seed
-directory is still required as ``DV8_AUDIT_FIXTURES`` for the positive P8.1
+Run with ``DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES=DIR``.  The regular audit seed
+directory is still required as ``DOVIFUSE_AUDIT_FIXTURES`` for the positive P8.1
 and P7 donors and the HDR10 target.
 """
 
@@ -48,7 +48,7 @@ def sha256(path: Path) -> str:
 
 
 def executable(name: str, resources: Path) -> Path:
-    override = os.environ.get(f"DV8_DONOR_{name.upper()}")
+    override = os.environ.get(f"DOVIFUSE_DONOR_{name.upper()}")
     if override:
         return Path(override)
     # Linux CI installs MKVToolNix/MediaInfo system-wide.  The repository's
@@ -115,7 +115,7 @@ def prepare(destination: Path, base: Path, resources: Path) -> None:
     mkvmerge = executable("mkvmerge", resources)
     dovi = executable("dovi_tool", resources)
     ffmpeg = executable("ffmpeg", resources)
-    work = Path(tempfile.mkdtemp(prefix="dv8-donor-fixture-build-"))
+    work = Path(tempfile.mkdtemp(prefix="dovifuse-donor-fixture-build-"))
     try:
         frames = video_frame_count(base / "hdr.mkv", executable("mediainfo", resources), work)
 
@@ -264,8 +264,8 @@ def invoke(
     report = work / f"{label}.report.json"
     env = dict(os.environ)
     env.update(
-        DV8_SCRIPT_DIR=str(resources),
-        DV8_PROCESSING_LOG_FILE=str(work / f"{label}.processing.log"),
+        DOVIFUSE_SCRIPT_DIR=str(resources),
+        DOVIFUSE_PROCESSING_LOG_FILE=str(work / f"{label}.processing.log"),
     )
     process = subprocess.run(
         [
@@ -316,12 +316,12 @@ def invoke(
 
 def run_regressions(fixtures: Path, binary: Path, resources: Path) -> None:
     load_manifest(fixtures)
-    base = Path(os.environ.get("DV8_AUDIT_FIXTURES", fixtures.parent))
+    base = Path(os.environ.get("DOVIFUSE_AUDIT_FIXTURES", fixtures.parent))
     for name in ("dv.mkv", "p7.mkv", "hdr.mkv"):
         if not (base / name).is_file():
             raise SystemExit(f"Missing regular audit fixture required for positives: {base / name}")
 
-    work = Path(tempfile.mkdtemp(prefix="dv8-donor-eligibility-"))
+    work = Path(tempfile.mkdtemp(prefix="dovifuse-donor-eligibility-"))
     print(f"Donor eligibility logs: {work}", flush=True)
     invalid_cases = {
         "p84-hlg": (fixtures / "donor-p84-hlg.mkv", "compatibility|HLG|P8.4"),
@@ -387,14 +387,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--base-fixtures",
         type=Path,
-        default=Path(os.environ.get("DV8_AUDIT_FIXTURES", "")) if os.environ.get("DV8_AUDIT_FIXTURES") else None,
+        default=Path(os.environ.get("DOVIFUSE_AUDIT_FIXTURES", "")) if os.environ.get("DOVIFUSE_AUDIT_FIXTURES") else None,
         help="regular audit seed directory used by --prepare",
     )
     parser.add_argument(
         "--fixtures",
         type=Path,
-        default=Path(os.environ.get("DV8_DONOR_ELIGIBILITY_FIXTURES", ""))
-        if os.environ.get("DV8_DONOR_ELIGIBILITY_FIXTURES")
+        default=Path(os.environ.get("DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES", ""))
+        if os.environ.get("DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES")
         else None,
         help="prepared donor fixture directory",
     )
@@ -403,16 +403,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    resources = Path(os.environ.get("DV8_AUDIT_RESOURCES", ROOT))
+    resources = Path(os.environ.get("DOVIFUSE_AUDIT_RESOURCES", ROOT))
     if args.prepare:
         if args.base_fixtures is None:
-            raise SystemExit("--prepare requires --base-fixtures or DV8_AUDIT_FIXTURES")
+            raise SystemExit("--prepare requires --base-fixtures or DOVIFUSE_AUDIT_FIXTURES")
         prepare(args.prepare, args.base_fixtures, resources)
         return
     if args.fixtures is None:
-        raise SystemExit("Set DV8_DONOR_ELIGIBILITY_FIXTURES or pass --fixtures")
+        raise SystemExit("Set DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES or pass --fixtures")
     binary = Path(
-        os.environ.get("DV8_AUDIT_BIN", ROOT / "dv8_converter/target/debug/dv8_converter")
+        os.environ.get("DOVIFUSE_AUDIT_BIN", ROOT / "dovifuse_converter/target/debug/dovifuse_converter")
     )
     run_regressions(args.fixtures.resolve(), binary, resources)
 

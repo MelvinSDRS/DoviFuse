@@ -173,7 +173,7 @@ private struct InputCanvas: View {
                     .frame(maxWidth: 520)
             } else {
                 DropZone(
-                    title: "DV8 Movie",
+                    title: "Dolby Vision Movie",
                     subtitle: "Drop any Profile 8 MKV to verify",
                     url: model.checkerSource
                 ) { model.accept($0, role: "checker") }
@@ -201,7 +201,7 @@ private struct InputCanvas: View {
                 .foregroundStyle(.green)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else if model.mode == .standard {
-            Label("Ready — the validated DV8 replaces the original", systemImage: "exclamationmark.triangle.fill")
+            Label("Ready — the validated file replaces the original", systemImage: "exclamationmark.triangle.fill")
                 .font(.callout)
                 .foregroundStyle(.orange)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))

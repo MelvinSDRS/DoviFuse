@@ -8,7 +8,7 @@ struct WorkflowRenderingTests {
         _ = NSApplication.shared
         let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        let suite = "DV8Render-" + UUID().uuidString
+        let suite = "DoviFuseRender-" + UUID().uuidString
         let preferences = UserDefaults(suiteName: suite)!
         defer { preferences.removePersistentDomain(forName: suite) }
         let model = AppModel(preferences: preferences)

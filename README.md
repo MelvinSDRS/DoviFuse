@@ -1,9 +1,9 @@
-# DV8 Maker
+# DoviFuse
 
 Convert, combine, and check Dolby Vision MKV files with a native macOS app
 and a Rust command-line engine.
 
-![DV8 Maker showing a hybrid conversion](docs/images/dv8-maker-hybrid.png)
+![DoviFuse hybrid conversion interface with demo data](docs/images/dovifuse-hybrid.png)
 
 ## What it does
 
@@ -15,8 +15,8 @@ and a Rust command-line engine.
 
 ## Download
 
-Get `DV8-Maker-arm64.dmg` from [Releases](https://github.com/MelvinSDRS/DV8/releases).
-Open it and drag **DV8 Maker** into Applications.
+Get `DoviFuse-arm64.dmg` from [Releases](https://github.com/MelvinSDRS/DoviFuse/releases).
+Open it and drag **DoviFuse** into Applications.
 
 The app runs on **Apple Silicon Macs** and includes its media tools. It is
 ad-hoc signed, so macOS may require approval in **System Settings → Privacy &
@@ -37,13 +37,13 @@ reconstruction. Profile 5 inputs are not supported.
 
 ```bash
 # Convert a Profile 7 file
-./DV7toDV8.sh movie.mkv
+./DoviFuse.sh movie.mkv
 
 # Build a hybrid from two sources
-./DV7toDV8.sh --hybrid donor.mkv hdr10.mkv
+./DoviFuse.sh --hybrid donor.mkv hdr10.mkv
 
 # Check a file without changing it
-./DV7toDV8.sh --check movie.mkv
+./DoviFuse.sh --check movie.mkv
 ```
 
 See the [CLI reference](docs/CLI.md) for installation requirements, all options,
@@ -51,7 +51,7 @@ qBittorrent automation, and report details.
 
 ## Development
 
-- [`dv8_converter/`](dv8_converter/) — Rust engine.
+- [`dovifuse_converter/`](dovifuse_converter/) — Rust engine.
 - [`macapp/`](macapp/) — SwiftUI app and macOS packaging.
 - [`scripts/`](scripts/) — regression tests and release tooling.
 

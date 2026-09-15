@@ -13,12 +13,12 @@ import time
 import signal
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = Path(tempfile.mkdtemp(prefix='dv8-audit-'))
-FF = Path(os.environ.get('DV8_AUDIT_FFMPEG', ROOT / 'tools/ffmpeg'))
-RESOURCES = Path(os.environ.get('DV8_AUDIT_RESOURCES', ROOT))
+WORK = Path(tempfile.mkdtemp(prefix='dovifuse-audit-'))
+FF = Path(os.environ.get('DOVIFUSE_AUDIT_FFMPEG', ROOT / 'tools/ffmpeg'))
+RESOURCES = Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES', ROOT))
 DOVI = RESOURCES / 'tools/dovi_tool'
-BIN = Path(os.environ.get('DV8_AUDIT_BIN', ROOT / 'dv8_converter/target/debug/dv8_converter'))
-ENV = dict(os.environ, DV8_SCRIPT_DIR=str(RESOURCES), DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+BIN = Path(os.environ.get('DOVIFUSE_AUDIT_BIN', ROOT / 'dovifuse_converter/target/debug/dovifuse_converter'))
+ENV = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(RESOURCES), DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 results = []
 app_replays = []
 
@@ -96,10 +96,10 @@ assert digest(WORK/'Case.MKV')!=source_p7
 archive=WORK/'archive';archive.mkdir()
 shutil.copyfile(WORK/'p7.mkv',WORK/'archive-test.mkv')
 archive_file=archive/'archive-test.DV7.EL_RPU.hevc';archive_file.write_text('previous archive')
-ENV['DV8_EL_RPU_DIR']=str(archive)
+ENV['DOVIFUSE_EL_RPU_DIR']=str(archive)
 convert([WORK/'archive-test.mkv'],'archive-collision',1)
 assert archive_file.read_text()=='previous archive' and digest(WORK/'archive-test.mkv')==source_p7
-ENV.pop('DV8_EL_RPU_DIR')
+ENV.pop('DOVIFUSE_EL_RPU_DIR')
 
 # Cancel during full validation: child stops, original and cleanup boundaries hold.
 shutil.copyfile(WORK/'p7.mkv', WORK/'cancel.mkv')
@@ -159,5 +159,5 @@ required = json.loads((ROOT/'tests/fixtures/regression-cases.json').read_text())
 assert len(results) == len(set(results)), 'Duplicate regression names'
 assert set(required).issubset(results), f'Missing regressions: {set(required)-set(results)}'
 (WORK/'summary.json').write_text(json.dumps({'passed':results,'work':str(WORK)},indent=2))
-Path(os.environ.get('DV8_APP_REPLAY_MANIFEST', WORK/'app-replay.json')).write_text(json.dumps(app_replays, indent=2))
+Path(os.environ.get('DOVIFUSE_APP_REPLAY_MANIFEST', WORK/'app-replay.json')).write_text(json.dumps(app_replays, indent=2))
 print(json.dumps({'passed':len(results),'work':str(WORK),'cases':results},indent=2))

@@ -103,7 +103,7 @@ pub(crate) fn process_file(file: &Path, rt: &Runtime, logger: &Logger) -> AppRes
 
     let scratch_root = rt.tmp_dir.as_deref().unwrap_or(input_dir);
     let scratch_owned = if !rt.dry_run {
-        create_job_dir(scratch_root, "dv8-standard")?
+        create_job_dir(scratch_root, "dovifuse-standard")?
     } else {
         scratch_root.to_path_buf()
     };

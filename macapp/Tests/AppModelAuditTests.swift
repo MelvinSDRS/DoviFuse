@@ -3,8 +3,36 @@ import Foundation
 @main
 struct AppModelAuditTests {
     @MainActor
+    static func testSupportDirectoryMigration() {
+        let manager = FileManager.default
+        let root = manager.temporaryDirectory.appendingPathComponent("DoviFuse-migration-" + UUID().uuidString)
+        defer { try? manager.removeItem(at: root) }
+        let legacy = root.appendingPathComponent("DV8 Maker")
+        let current = root.appendingPathComponent("DoviFuse")
+        do {
+            try manager.createDirectory(at: legacy, withIntermediateDirectories: true)
+            let payload = Data("saved report".utf8)
+            try payload.write(to: legacy.appendingPathComponent("report.json"))
+            AppModel.migrateLegacySupportDirectory(applicationSupport: root)
+            assert(!manager.fileExists(atPath: legacy.path))
+            let migrated = try Data(contentsOf: current.appendingPathComponent("report.json"))
+            assert(migrated == payload)
+            // A repeat launch cannot overwrite data when both directories exist.
+            try manager.createDirectory(at: legacy, withIntermediateDirectories: true)
+            try Data("older report".utf8).write(to: legacy.appendingPathComponent("report.json"))
+            AppModel.migrateLegacySupportDirectory(applicationSupport: root)
+            let preserved = try Data(contentsOf: current.appendingPathComponent("report.json"))
+            assert(preserved == payload)
+            assert(manager.fileExists(atPath: legacy.appendingPathComponent("report.json").path))
+        } catch {
+            fatalError("Support directory migration test failed: \(error)")
+        }
+    }
+
+    @MainActor
     static func main() {
-        let suite = "DV8Audit-" + UUID().uuidString
+        testSupportDirectoryMigration()
+        let suite = "DoviFuseAudit-" + UUID().uuidString
         let preferences = UserDefaults(suiteName: suite)!
         defer { preferences.removePersistentDomain(forName: suite) }
         let model = AppModel(preferences: preferences)
@@ -161,7 +189,7 @@ struct AppModelAuditTests {
             item.receiveEOF("stdout", id: id)
             assert(item.phase == expected && !item.canFix, "Terminal mismatch: \(execution)/\(validation): \(item.phase)")
         }
-        if let path = ProcessInfo.processInfo.environment["DV8_APP_REPLAY_MANIFEST"] {
+        if let path = ProcessInfo.processInfo.environment["DOVIFUSE_APP_REPLAY_MANIFEST"] {
             replayActualJobs(URL(fileURLWithPath: path), preferences: preferences)
         }
         print("Passed: input identity, stale repair, pipe drain ordering, trailing JSON, missing completion and outcome precedence")

@@ -30,14 +30,14 @@ def main():
     parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--case', help='Run one named control for reproduction')
     opts = parser.parse_args()
-    resources = Path(os.environ.get('DV8_AUDIT_RESOURCES', ROOT))
-    binary = Path(os.environ.get('DV8_AUDIT_BIN', ROOT/'dv8_converter/target/debug/dv8_converter'))
-    seeds = Path(os.environ['DV8_AUDIT_FIXTURES'])
+    resources = Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES', ROOT))
+    binary = Path(os.environ.get('DOVIFUSE_AUDIT_BIN', ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+    seeds = Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
     manifest = json.loads((seeds/'manifest.json').read_text())
     assert manifest['kind'] == 'synthetic-mechanics-only'
     tools = {name: str(Path(shutil.which(name) or resources/'tools'/name).resolve())
              for name in ('dovi_tool', 'mkvmerge', 'mkvextract', 'mediainfo', 'ffmpeg', 'ffprobe')}
-    root = Path(tempfile.mkdtemp(prefix='dv8-faults-'))
+    root = Path(tempfile.mkdtemp(prefix='dovifuse-faults-'))
     print('Fault evidence:', root, flush=True)
     cases = [
         ('cancel-capture-descendants', 'standard', 'ffmpeg', ['-vf'], 'hang'),
@@ -84,9 +84,9 @@ def main():
         config = dict(tools=tools, tool=tool, tokens=tokens, action=action, work=str(work),
                       error='No space left on device (injected)' if 'full' in name else 'Input/output error (injected)')
         (work/'config.json').write_text(json.dumps(config))
-        env = dict(os.environ, DV8_SCRIPT_DIR=str(work), DV8_FAULT_CONFIG=str(work/'config.json'),
+        env = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(work), DOVIFUSE_FAULT_CONFIG=str(work/'config.json'),
                    PATH=str(work/'tools')+os.pathsep+os.environ['PATH'],
-                   DV8_PROCESSING_LOG_FILE=str(work/'processing.log'))
+                   DOVIFUSE_PROCESSING_LOG_FILE=str(work/'processing.log'))
         args = [str(binary), '--progress', 'jsonl', '--hwaccel', 'off', '--report', str(work/'report.json'),
                 '--tmp-dir', str(work/'scratch')]
         if mode in ('standard', 'archive'):
@@ -118,7 +118,7 @@ def main():
                             process.wait(timeout=5)
                         second_args = args.copy()
                         second_args[second_args.index('--report')+1] = str(work/'second.report.json')
-                        clean = dict(env, DV8_SCRIPT_DIR=str(resources), PATH=os.environ['PATH'])
+                        clean = dict(env, DOVIFUSE_SCRIPT_DIR=str(resources), PATH=os.environ['PATH'])
                         second = subprocess.run(second_args, env=clean, capture_output=True, text=True, timeout=30)
                         (work/'second.log').write_text(second.stdout+second.stderr)
                         assert second.returncode != 0 and 'output already exists' in second.stdout+second.stderr
@@ -178,8 +178,8 @@ def main():
                'limits': ['ENOSPC/EIO are tool-boundary injections, not a real disconnected NAS.',
                           'No power-loss or uninterruptible kernel I/O guarantee.']}
     (root/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
-    if os.environ.get('DV8_APP_REPLAY_MANIFEST'):
-        path = Path(os.environ['DV8_APP_REPLAY_MANIFEST'])
+    if os.environ.get('DOVIFUSE_APP_REPLAY_MANIFEST'):
+        path = Path(os.environ['DOVIFUSE_APP_REPLAY_MANIFEST'])
         existing = json.loads(path.read_text())
         path.write_text(json.dumps(existing+app_replays, indent=2)+'\n')
     if not opts.baseline:

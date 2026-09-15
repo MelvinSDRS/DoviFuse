@@ -27,18 +27,18 @@ def main():
     mount_paths = [Path(line.split(' on ', 1)[1].rsplit(' (', 1)[0])
                    for line in mounts.splitlines() if ' on ' in line]
     assert any(p == destination or p in destination.parents for p in mount_paths), 'Destination is not on an SMB mount'
-    local = Path(tempfile.mkdtemp(prefix='dv8-smb-local-'))
-    remote = Path(tempfile.mkdtemp(prefix='dv8-smb-', dir=destination))
-    resources = Path(os.environ['DV8_AUDIT_RESOURCES'])
-    binary = Path(os.environ['DV8_AUDIT_BIN'])
-    seeds = Path(os.environ['DV8_AUDIT_FIXTURES'])
+    local = Path(tempfile.mkdtemp(prefix='dovifuse-smb-local-'))
+    remote = Path(tempfile.mkdtemp(prefix='dovifuse-smb-', dir=destination))
+    resources = Path(os.environ['DOVIFUSE_AUDIT_RESOURCES'])
+    binary = Path(os.environ['DOVIFUSE_AUDIT_BIN'])
+    seeds = Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
     manifest = json.loads((seeds/'manifest.json').read_text())
     assert manifest['kind'] == 'synthetic-mechanics-only'
     for name in ['p7.mkv', 'dv.mkv', 'hdr.mkv']:
         assert sha256(seeds/name) == manifest['sha256'][name]
         shutil.copyfile(seeds/name, remote/name)
-    env = dict(os.environ, DV8_SCRIPT_DIR=str(resources),
-               DV8_PROCESSING_LOG_FILE=str(local/'processing.log'))
+    env = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(resources),
+               DOVIFUSE_PROCESSING_LOG_FILE=str(local/'processing.log'))
 
     # Independently derive the expected archive with the bundled media tools.
     encoded, expected = local/'source.hevc', local/'expected-archive.hevc'
@@ -87,8 +87,8 @@ def main():
                'cases': results, 'artifacts': str(remote),
                'limit': 'Successful filesystem/server synchronization is not remote hardware power-loss proof'}
     (local/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
-    if os.environ.get('DV8_APP_REPLAY_MANIFEST'):
-        path = Path(os.environ['DV8_APP_REPLAY_MANIFEST'])
+    if os.environ.get('DOVIFUSE_APP_REPLAY_MANIFEST'):
+        path = Path(os.environ['DOVIFUSE_APP_REPLAY_MANIFEST'])
         path.write_text(json.dumps(json.loads(path.read_text())+replays, indent=2)+'\n')
     print('SMB integration evidence:', local, json.dumps(summary), flush=True)
     if not opts.baseline:

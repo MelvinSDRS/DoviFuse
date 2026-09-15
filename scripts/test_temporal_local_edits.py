@@ -9,9 +9,9 @@ still support the global offset 0 while exposing a local edit contradiction.
 
 Prepare a portable fixture on an encoder-capable host (the Linux CI job)::
 
-    python3 scripts/test_temporal_local_edits.py --prepare /tmp/dv8-temporal-fixture
+    python3 scripts/test_temporal_local_edits.py --prepare /tmp/dovifuse-temporal-fixture
 
-Then run it with ``DV8_TEMPORAL_LOCAL_FIXTURES`` on Linux or macOS.  The Mac
+Then run it with ``DOVIFUSE_TEMPORAL_LOCAL_FIXTURES`` on Linux or macOS.  The Mac
 bundle check consumes this prebuilt fixture; it does not require an HEVC
 encoder.  The fixture and all conversion outputs remain outside the
 repository.
@@ -32,7 +32,7 @@ from typing import Iterable, Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESOURCES = Path(os.environ.get("DV8_AUDIT_RESOURCES", ROOT))
+RESOURCES = Path(os.environ.get("DOVIFUSE_AUDIT_RESOURCES", ROOT))
 FRAME_COUNT = 300
 LOCAL_START = 120
 LOCAL_COUNT = 20
@@ -69,7 +69,7 @@ def sha256(path: Path) -> str:
 
 
 def executable(name: str, resources: Path = RESOURCES) -> Path:
-    override = os.environ.get(f"DV8_TEMPORAL_{name.upper()}")
+    override = os.environ.get(f"DOVIFUSE_TEMPORAL_{name.upper()}")
     if override:
         return Path(override)
     # System MKVToolNix is preferred on Linux because the bundled copies can
@@ -201,7 +201,7 @@ def prepare(destination: Path) -> None:
     if destination.exists():
         raise RuntimeError(f"Refusing to overwrite fixture directory: {destination}")
     destination.mkdir(parents=True)
-    work = Path(tempfile.mkdtemp(prefix="dv8-temporal-prepare-", dir="/tmp"))
+    work = Path(tempfile.mkdtemp(prefix="dovifuse-temporal-prepare-", dir="/tmp"))
     ffmpeg = executable("ffmpeg")
     dovi = executable("dovi_tool")
     mkvmerge = executable("mkvmerge")
@@ -313,8 +313,8 @@ def run_conversion(
     report = work / f"{name}.json"
     log = work / f"{name}.processing.log"
     env = dict(os.environ)
-    env["DV8_SCRIPT_DIR"] = str(resources)
-    env["DV8_PROCESSING_LOG_FILE"] = str(log)
+    env["DOVIFUSE_SCRIPT_DIR"] = str(resources)
+    env["DOVIFUSE_PROCESSING_LOG_FILE"] = str(log)
     # Keep host tools first on Linux; bundled MKVToolNix copies may depend on
     # private libraries.  On macOS the host lookup falls through to resources.
     env["PATH"] = os.pathsep.join((env.get("PATH", ""), str(resources / "tools")))
@@ -369,7 +369,7 @@ def verify(
     baseline: Path | None,
 ) -> None:
     manifest = load_fixture(source)
-    work = Path(tempfile.mkdtemp(prefix="dv8-temporal-local-", dir="/tmp"))
+    work = Path(tempfile.mkdtemp(prefix="dovifuse-temporal-local-", dir="/tmp"))
     before = {name: sha256(source / name) for name in MEDIA_NAMES}
     print(f"Temporal local-edit controls: {work}", flush=True)
     try:
@@ -435,16 +435,16 @@ def main() -> int:
     parser.add_argument(
         "--fixtures",
         type=Path,
-        default=Path(os.environ.get("DV8_TEMPORAL_LOCAL_FIXTURES", ""))
-        if os.environ.get("DV8_TEMPORAL_LOCAL_FIXTURES")
+        default=Path(os.environ.get("DOVIFUSE_TEMPORAL_LOCAL_FIXTURES", ""))
+        if os.environ.get("DOVIFUSE_TEMPORAL_LOCAL_FIXTURES")
         else None,
     )
     parser.add_argument(
         "--binary",
         type=Path,
-        default=Path(os.environ.get("DV8_AUDIT_BIN", ROOT / "dv8_converter/target/debug/dv8_converter")),
+        default=Path(os.environ.get("DOVIFUSE_AUDIT_BIN", ROOT / "dovifuse_converter/target/debug/dovifuse_converter")),
     )
-    baseline_value = os.environ.get("DV8_TEMPORAL_BASELINE_BIN")
+    baseline_value = os.environ.get("DOVIFUSE_TEMPORAL_BASELINE_BIN")
     parser.add_argument(
         "--baseline",
         type=Path,
@@ -458,7 +458,7 @@ def main() -> int:
             prepare(args.prepare.resolve())
             return 0
         if args.fixtures is None:
-            raise RuntimeError("Set DV8_TEMPORAL_LOCAL_FIXTURES or pass --fixtures")
+            raise RuntimeError("Set DOVIFUSE_TEMPORAL_LOCAL_FIXTURES or pass --fixtures")
         paths = [(args.fixtures, "fixture"), (args.binary, "fixed binary")]
         if args.baseline is not None:
             paths.append((args.baseline, "baseline binary"))

@@ -16,8 +16,8 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = Path(tempfile.mkdtemp(prefix='dv8-native-crash-', dir='/tmp'))
-RES = Path(os.environ['DV8_AUDIT_RESOURCES'])
+WORK = Path(tempfile.mkdtemp(prefix='dovifuse-native-crash-', dir='/tmp'))
+RES = Path(os.environ['DOVIFUSE_AUDIT_RESOURCES'])
 APP = WORK/'AuditHost.app'
 digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
 
@@ -39,24 +39,24 @@ subprocess.run(['ditto', str(RES.parent.parent), str(APP)], check=True)
 contents = APP/'Contents'
 executable = contents/'MacOS/AuditHost'
 subprocess.run(['xcrun','swiftc','-swift-version','6','-strict-concurrency=complete','-parse-as-library',
-                str(ROOT/'macapp/DV8Maker/AppModel.swift'), str(ROOT/'macapp/DV8Maker/ScratchCapacity.swift'),
+                str(ROOT/'macapp/DoviFuse/AppModel.swift'), str(ROOT/'macapp/DoviFuse/ScratchCapacity.swift'),
                 str(ROOT/'macapp/Tests/AppCrashAuditHost.swift'),'-o',str(executable)], check=True)
 plist_path=contents/'Info.plist'
 info=plistlib.loads(plist_path.read_bytes())
-info.update(CFBundleExecutable='AuditHost',CFBundleIdentifier='local.dv8.crashaudit.'+WORK.name,CFBundleName='DV8 Audit Host')
+info.update(CFBundleExecutable='AuditHost',CFBundleIdentifier='local.dovifuse.crashaudit.'+WORK.name,CFBundleName='DoviFuse Audit Host')
 plist_path.write_bytes(plistlib.dumps(info))
 source=WORK/'source.mkv'
-shutil.copyfile(Path(os.environ['DV8_AUDIT_FIXTURES'])/'p7.mkv', source)
+shutil.copyfile(Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])/'p7.mkv', source)
 before=digest(source)
 (WORK/'scratch').mkdir()
 shim=contents/'Resources/tools/ffmpeg'
 shim.write_text('#!/usr/bin/python3\nimport json,os,subprocess,sys,time\nfrom pathlib import Path\n'
                 'if "-version" in sys.argv: sys.exit(subprocess.call(['+repr(str(RES/'tools/ffmpeg'))+']+sys.argv[1:]))\n'
-                'Path(os.environ["DV8_NATIVE_AUDIT_ROOT"],"held.json").write_text(json.dumps({"pid":os.getpid()}))\n'
+                'Path(os.environ["DOVIFUSE_NATIVE_AUDIT_ROOT"],"held.json").write_text(json.dumps({"pid":os.getpid()}))\n'
                 'time.sleep(3600)\n')
 shim.chmod(0o755)
 subprocess.run(['codesign','--force','--deep','--sign','-',str(APP)],check=True)
-env=dict(os.environ,DV8_NATIVE_AUDIT_ROOT=str(WORK))
+env=dict(os.environ,DOVIFUSE_NATIVE_AUDIT_ROOT=str(WORK))
 host=restart=None
 converter_pid=held_pid=None
 try:
@@ -64,8 +64,8 @@ try:
         host=subprocess.Popen([str(executable),'--run'],env=env,stdout=log,stderr=log)
         wait_for(lambda:(WORK/'held.json').exists())
         held_pid=json.loads((WORK/'held.json').read_text())['pid']
-        converter_pid=next(pid for pid,parent,name in processes() if parent==host.pid and name.endswith('/dv8_converter'))
-        reports=Path.home()/'Library/Application Support/DV8 Maker/Reports'
+        converter_pid=next(pid for pid,parent,name in processes() if parent==host.pid and name.endswith('/dovifuse_converter'))
+        reports=Path.home()/'Library/Application Support/DoviFuse/Reports'
         report=next(p for p in reports.glob('*.json') if str(source) in json.loads(p.read_text()).get('arguments',[]))
         assert json.loads(report.read_text())['execution']=='running'
         host.kill();host.wait(timeout=5)
@@ -76,7 +76,7 @@ try:
         wait_for(lambda:(WORK/'restart.json').exists())
         state=json.loads((WORK/'restart.json').read_text())
         assert state=={'isRunning':False,'phase':'Ready','hasOutput':False,'hasReport':False},state
-        assert not any(parent==restart.pid and name.endswith('/dv8_converter') for _,parent,name in processes())
+        assert not any(parent==restart.pid and name.endswith('/dovifuse_converter') for _,parent,name in processes())
         # Force-kill cannot ask the converter to cancel. The audit supervisor
         # explicitly stops the isolated surviving job after testing restart.
         os.kill(converter_pid,signal.SIGTERM)

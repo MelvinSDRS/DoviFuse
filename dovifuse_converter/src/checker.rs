@@ -151,7 +151,7 @@ pub(crate) fn check_file_with_phase_offset(
     }
 
     let scratch_root = rt.tmp_dir.clone().unwrap_or_else(std::env::temp_dir);
-    let scratch = create_job_dir(&scratch_root, "dv8-check")?;
+    let scratch = create_job_dir(&scratch_root, "dovifuse-check")?;
     let rpu = scratch.join("check.rpu.bin");
     let rpu_scenes = scratch.join("rpu-scenes.txt");
     let mut cleanup = CleanupGuard::new(logger.clone());

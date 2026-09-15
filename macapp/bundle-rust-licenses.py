@@ -12,7 +12,7 @@ destination = Path(sys.argv[1]) / 'licenses' / 'rust'
 destination.mkdir(parents=True, exist_ok=True)
 packages = {}
 for project, features in [
-    ('dv8_converter', []),
+    ('dovifuse_converter', []),
     ('dovi_tool', ['--no-default-features', '--features', 'internal-font']),
 ]:
     metadata = json.loads(subprocess.check_output([
@@ -34,7 +34,7 @@ for project, features in [
             if any(kind['kind'] != 'dev' for kind in dependency['dep_kinds']):
                 pending.append(dependency['pkg'])
     for package in metadata['packages']:
-        if package['id'] in included and package['name'] != 'dv8_converter':
+        if package['id'] in included and package['name'] != 'dovifuse_converter':
             packages[package['id']] = package
 notices = []
 for package in sorted(packages.values(), key=lambda p: (p['name'], p['version'])):

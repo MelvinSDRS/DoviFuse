@@ -10,11 +10,11 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RES = Path(os.environ.get('DV8_AUDIT_RESOURCES', ROOT))
-BIN = Path(os.environ.get('DV8_AUDIT_BIN', ROOT/'dv8_converter/target/debug/dv8_converter'))
-SEEDS = Path(os.environ['DV8_AUDIT_FIXTURES'])
-WORK = Path(tempfile.mkdtemp(prefix='dv8-temporal-', dir='/tmp'))
-ENV = dict(os.environ, DV8_SCRIPT_DIR=str(RES), DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+RES = Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES', ROOT))
+BIN = Path(os.environ.get('DOVIFUSE_AUDIT_BIN', ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+SEEDS = Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+WORK = Path(tempfile.mkdtemp(prefix='dovifuse-temporal-', dir='/tmp'))
+ENV = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(RES), DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 ENV['PATH'] += os.pathsep + str(RES/'tools')
 DOVI = shutil.which('dovi_tool', path=ENV['PATH'])
 RESULTS = []
@@ -77,7 +77,7 @@ fault_resources = WORK/'fault-resources'
 (fault_resources/'tools').mkdir(parents=True)
 (fault_resources/'tools/dovi_tool').symlink_to(wrapper)
 (fault_resources/'config').symlink_to(RES/'config', target_is_directory=True)
-fault_env = dict(ENV, PATH=str(fault)+os.pathsep+ENV['PATH'], DV8_SCRIPT_DIR=str(fault_resources))
+fault_env = dict(ENV, PATH=str(fault)+os.pathsep+ENV['PATH'], DOVIFUSE_SCRIPT_DIR=str(fault_resources))
 p = convert('output-shift-rejected', donor='dv.mkv', flags=['--sync', 'framecount'], env=fault_env)
 assert 'Post-inject sync FAILED' in p.stdout+p.stderr
 assert (WORK/'output-shift-rejected.FAILED.mkv').exists()

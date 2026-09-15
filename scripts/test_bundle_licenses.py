@@ -29,9 +29,9 @@ import os
 from pathlib import Path
 import sys
 
-metadata = json.loads(Path(os.environ["DV8_TEST_CARGO_METADATA"]).read_text())
+metadata = json.loads(Path(os.environ["DOVIFUSE_TEST_CARGO_METADATA"]).read_text())
 manifest = Path(sys.argv[sys.argv.index("--manifest-path") + 1])
-calls = Path(os.environ["DV8_TEST_CARGO_CALLS"])
+calls = Path(os.environ["DOVIFUSE_TEST_CARGO_CALLS"])
 with calls.open("a") as stream:
     stream.write(manifest.parent.name + "\\n")
 print(json.dumps(metadata[manifest.parent.name]))
@@ -76,7 +76,7 @@ def metadata(
 
 class BundleLicenseCollectorTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(prefix="dv8-bundle-licenses-test-")
+        self.temp = tempfile.TemporaryDirectory(prefix="dovifuse-bundle-licenses-test-")
         self.work = Path(self.temp.name)
         self.packages = self.work / "packages"
         self.packages.mkdir()
@@ -105,8 +105,8 @@ class BundleLicenseCollectorTests(unittest.TestCase):
         destination = self.work / "resources"
         env = dict(os.environ)
         env["PATH"] = os.pathsep.join((str(self.mock_bin), env.get("PATH", "")))
-        env["DV8_TEST_CARGO_METADATA"] = str(metadata_file)
-        env["DV8_TEST_CARGO_CALLS"] = str(calls_file)
+        env["DOVIFUSE_TEST_CARGO_METADATA"] = str(metadata_file)
+        env["DOVIFUSE_TEST_CARGO_CALLS"] = str(calls_file)
         result = subprocess.run(
             [sys.executable, str(COLLECTOR), str(destination)],
             env=env,
@@ -117,7 +117,7 @@ class BundleLicenseCollectorTests(unittest.TestCase):
         return result, calls_file.read_text().splitlines(), destination
 
     def test_collects_both_roots_deduplicates_and_hashes_nested_notices(self) -> None:
-        dv8_root = self.make_package("dv8-root")
+        dovifuse_root = self.make_package("dovifuse-root")
         dovi_root = self.make_package("dovi-root")
         shared = self.make_package("shared-runtime")
         dovi_only = self.make_package("dovi-only")
@@ -129,8 +129,8 @@ class BundleLicenseCollectorTests(unittest.TestCase):
         nested.write_text("nested shared notice\n")
         (dovi_only / "COPYRIGHT.txt").write_text("dovi-only copyright\n")
 
-        dv8_packages = [
-            package("dv8-root", "dv8_converter", "1.0.0", dv8_root),
+        dovifuse_packages = [
+            package("dovifuse-root", "dovifuse_converter", "1.0.0", dovifuse_root),
             package("shared", "shared-runtime", "2.0.0", shared),
             package("dev", "dev-only", "9.0.0", dev_only),
         ]
@@ -141,9 +141,9 @@ class BundleLicenseCollectorTests(unittest.TestCase):
         ]
         result, calls, destination = self.run_collector(
             {
-                "dv8_converter": metadata(
-                    "dv8-root",
-                    dv8_packages,
+                "dovifuse_converter": metadata(
+                    "dovifuse-root",
+                    dovifuse_packages,
                     [dependency("shared"), dependency("dev", "dev")],
                 ),
                 "dovi_tool": metadata(
@@ -155,7 +155,7 @@ class BundleLicenseCollectorTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls, ["dv8_converter", "dovi_tool"])
+        self.assertEqual(calls, ["dovifuse_converter", "dovi_tool"])
         manifest_path = destination / "licenses" / "rust" / "manifest.json"
         notices = json.loads(manifest_path.read_text())
         self.assertEqual(
@@ -179,18 +179,18 @@ class BundleLicenseCollectorTests(unittest.TestCase):
         self.assertEqual(copied.read_bytes(), nested.read_bytes())
 
     def test_runtime_package_without_notice_fails(self) -> None:
-        dv8_root = self.make_package("dv8-root")
+        dovifuse_root = self.make_package("dovifuse-root")
         dovi_root = self.make_package("dovi-root")
         missing = self.make_package("missing-runtime")
         (dovi_root / "LICENSE").write_text("dovi tool license\n")
         packages = [
-            package("dv8-root", "dv8_converter", "1.0.0", dv8_root),
+            package("dovifuse-root", "dovifuse_converter", "1.0.0", dovifuse_root),
             package("dovi-root", "dovi_tool", "3.0.0", dovi_root),
             package("missing", "missing-runtime", "5.0.0", missing),
         ]
         result, _, destination = self.run_collector(
             {
-                "dv8_converter": metadata("dv8-root", [packages[0]], []),
+                "dovifuse_converter": metadata("dovifuse-root", [packages[0]], []),
                 "dovi_tool": metadata("dovi-root", packages[1:], [dependency("missing")]),
             }
         )

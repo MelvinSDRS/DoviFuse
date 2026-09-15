@@ -14,11 +14,11 @@ import tempfile
 from audit_fixtures import sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = Path(tempfile.mkdtemp(prefix='dv8-storage-'))
-RES = Path(os.environ['DV8_AUDIT_RESOURCES'])
-BIN = Path(os.environ['DV8_AUDIT_BIN'])
-SEEDS = Path(os.environ['DV8_AUDIT_FIXTURES'])
-ENV = dict(os.environ, DV8_SCRIPT_DIR=str(RES), DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+WORK = Path(tempfile.mkdtemp(prefix='dovifuse-storage-'))
+RES = Path(os.environ['DOVIFUSE_AUDIT_RESOURCES'])
+BIN = Path(os.environ['DOVIFUSE_AUDIT_BIN'])
+SEEDS = Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+ENV = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(RES), DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 image = WORK/'disk.dmg'
 mount = WORK/'volume'
 mount.mkdir()
@@ -49,7 +49,7 @@ def convert(name, success):
     return saved
 
 
-run(['hdiutil', 'create', '-size', '16m', '-fs', 'HFS+', '-volname', 'DV8-storage-audit', image], 'create').check_returncode()
+run(['hdiutil', 'create', '-size', '16m', '-fs', 'HFS+', '-volname', 'DoviFuse-storage-audit', image], 'create').check_returncode()
 attached = False
 try:
     run(['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount, image], 'attach').check_returncode()
@@ -85,7 +85,7 @@ finally:
         run(['hdiutil', 'detach', mount], 'detach').check_returncode()
 
 (WORK/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
-if os.environ.get('DV8_APP_REPLAY_MANIFEST'):
-    path = Path(os.environ['DV8_APP_REPLAY_MANIFEST'])
+if os.environ.get('DOVIFUSE_APP_REPLAY_MANIFEST'):
+    path = Path(os.environ['DOVIFUSE_APP_REPLAY_MANIFEST'])
     path.write_text(json.dumps(json.loads(path.read_text())+replays, indent=2)+'\n')
 print('Native storage controls passed:', WORK, json.dumps(summary))

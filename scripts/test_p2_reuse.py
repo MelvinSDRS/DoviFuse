@@ -11,11 +11,11 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RES = Path(os.environ.get("DV8_AUDIT_RESOURCES", ROOT))
-BIN = Path(os.environ.get("DV8_AUDIT_BIN", ROOT / "dv8_converter/target/debug/dv8_converter"))
-SEEDS = Path(os.environ["DV8_AUDIT_FIXTURES"])
-WORK = Path(tempfile.mkdtemp(prefix="dv8-reuse-", dir="/tmp"))
-ENV = dict(os.environ, DV8_SCRIPT_DIR=str(RES), DV8_PROCESSING_LOG_FILE=str(WORK / "processing.log"))
+RES = Path(os.environ.get("DOVIFUSE_AUDIT_RESOURCES", ROOT))
+BIN = Path(os.environ.get("DOVIFUSE_AUDIT_BIN", ROOT / "dovifuse_converter/target/debug/dovifuse_converter"))
+SEEDS = Path(os.environ["DOVIFUSE_AUDIT_FIXTURES"])
+WORK = Path(tempfile.mkdtemp(prefix="dovifuse-reuse-", dir="/tmp"))
+ENV = dict(os.environ, DOVIFUSE_SCRIPT_DIR=str(RES), DOVIFUSE_PROCESSING_LOG_FILE=str(WORK / "processing.log"))
 ENV["PATH"] += os.pathsep + str(RES / "tools")
 TOOLS = WORK / "tools"
 TOOLS.mkdir()
@@ -33,7 +33,7 @@ resources = WORK / "resources"
 resources.mkdir()
 (resources / "tools").symlink_to(TOOLS, target_is_directory=True)
 (resources / "config").symlink_to(RES / "config", target_is_directory=True)
-ENV["DV8_SCRIPT_DIR"] = str(resources)
+ENV["DOVIFUSE_SCRIPT_DIR"] = str(resources)
 manifest = json.loads((SEEDS / "manifest.json").read_text())
 inputs = []
 for name in ("dv.mkv", "hdr.mkv"):

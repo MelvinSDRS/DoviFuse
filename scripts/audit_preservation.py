@@ -15,11 +15,11 @@ import wave
 import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
-WORK=Path(tempfile.mkdtemp(prefix='dv8-preservation-',dir='/tmp'))
-RESOURCES=Path(os.environ.get('DV8_AUDIT_RESOURCES',ROOT))
-BIN=Path(os.environ.get('DV8_AUDIT_BIN',ROOT/'dv8_converter/target/debug/dv8_converter'))
-SEEDS=Path(os.environ['DV8_AUDIT_FIXTURES'])
-ENV=dict(os.environ,DV8_SCRIPT_DIR=str(RESOURCES),DV8_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
+WORK=Path(tempfile.mkdtemp(prefix='dovifuse-preservation-',dir='/tmp'))
+RESOURCES=Path(os.environ.get('DOVIFUSE_AUDIT_RESOURCES',ROOT))
+BIN=Path(os.environ.get('DOVIFUSE_AUDIT_BIN',ROOT/'dovifuse_converter/target/debug/dovifuse_converter'))
+SEEDS=Path(os.environ['DOVIFUSE_AUDIT_FIXTURES'])
+ENV=dict(os.environ,DOVIFUSE_SCRIPT_DIR=str(RESOURCES),DOVIFUSE_PROCESSING_LOG_FILE=str(WORK/'processing.log'))
 
 def require(condition,message):
     if not condition:raise RuntimeError(message)
@@ -43,7 +43,7 @@ with wave.open(str(WORK/'audio.wav'),'wb') as w:
     w.setnchannels(1);w.setsampwidth(2);w.setframerate(8000)
     w.writeframes(b''.join(((i*37)%6000-3000).to_bytes(2,'little',signed=True) for i in range(8000*6)))
 (WORK/'subtitles.srt').write_text('1\n00:00:01,000 --> 00:00:02,000\nPréservation — test\n\n2\n00:00:04,000 --> 00:00:05,500\nDeuxième réplique\n')
-(WORK/'attachment.bin').write_bytes(b'DV8 preservation attachment\x00\xff')
+(WORK/'attachment.bin').write_bytes(b'DoviFuse preservation attachment\x00\xff')
 (WORK/'chapters.xml').write_text('''<?xml version="1.0"?><Chapters><EditionEntry><EditionUID>101</EditionUID><ChapterAtom><ChapterUID>102</ChapterUID><ChapterTimeStart>00:00:00.000000000</ChapterTimeStart><ChapterDisplay><ChapterString>Début</ChapterString><ChapterLanguage>fre</ChapterLanguage></ChapterDisplay></ChapterAtom><ChapterAtom><ChapterUID>103</ChapterUID><ChapterTimeStart>00:00:04.000000000</ChapterTimeStart><ChapterDisplay><ChapterString>Suite</ChapterString><ChapterLanguage>fre</ChapterLanguage></ChapterDisplay></ChapterAtom></EditionEntry></Chapters>''')
 video_options=['--language','0:fr-CA','--track-name','0:Image cinéma','--default-track-flag','0:no','--forced-display-flag','0:yes','--track-enabled-flag','0:no','--hearing-impaired-flag','0:yes','--visual-impaired-flag','0:yes','--text-descriptions-flag','0:yes','--original-flag','0:yes','--commentary-flag','0:yes','--display-dimensions','0:1024x576','--stereo-mode','0:1']
 for label,seed in [('standard','p7.mkv'),('hybrid','hdr.mkv')]:

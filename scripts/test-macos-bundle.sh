@@ -9,11 +9,11 @@ PYTHON=$(command -v python3)
 RESOURCES="$APP/Contents/Resources"
 # Runtime lookup must use the bundle, even on developer machines with Homebrew.
 export PATH="$RESOURCES/tools:/usr/bin:/bin:/usr/sbin:/sbin"
-export DV8_AUDIT_RESOURCES="$RESOURCES"
-export DV8_AUDIT_BIN="$RESOURCES/tools/dv8_converter"
-export DV8_AUDIT_FIXTURES="$FIXTURES"
-export DV8_DONOR_ELIGIBILITY_FIXTURES="${DV8_DONOR_ELIGIBILITY_FIXTURES:-$FIXTURES/donor-eligibility}"
-export DV8_APP_REPLAY_MANIFEST=$(mktemp /tmp/dv8-app-replay.XXXXXX)
+export DOVIFUSE_AUDIT_RESOURCES="$RESOURCES"
+export DOVIFUSE_AUDIT_BIN="$RESOURCES/tools/dovifuse_converter"
+export DOVIFUSE_AUDIT_FIXTURES="$FIXTURES"
+export DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES="${DOVIFUSE_DONOR_ELIGIBILITY_FIXTURES:-$FIXTURES/donor-eligibility}"
+export DOVIFUSE_APP_REPLAY_MANIFEST=$(mktemp /tmp/dovifuse-app-replay.XXXXXX)
 unset PYTHONOPTIMIZE
 export TMPDIR=/tmp
 codesign --verify --deep --strict "$APP"
@@ -46,32 +46,32 @@ PY
 "$PYTHON" "$ROOT/scripts/test_temporal_alignment.py"
 "$PYTHON" "$ROOT/scripts/test_picture_coverage.py"
 "$PYTHON" "$ROOT/scripts/test_p2_reuse.py"
-export DV8_TEMPORAL_LOCAL_FIXTURES="${DV8_TEMPORAL_LOCAL_FIXTURES:-$DV8_AUDIT_FIXTURES/temporal-local}"
-if [[ ! -f "$DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
-  echo "Missing Linux-prepared temporal-local fixture manifest: $DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" >&2
+export DOVIFUSE_TEMPORAL_LOCAL_FIXTURES="${DOVIFUSE_TEMPORAL_LOCAL_FIXTURES:-$DOVIFUSE_AUDIT_FIXTURES/temporal-local}"
+if [[ ! -f "$DOVIFUSE_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
+  echo "Missing Linux-prepared temporal-local fixture manifest: $DOVIFUSE_TEMPORAL_LOCAL_FIXTURES/manifest.json" >&2
   echo "Upload and download the temporal-local fixture directory before running the Mac bundle checks." >&2
   exit 1
 fi
 "$PYTHON" "$ROOT/scripts/test_temporal_local_edits.py" \
-  --fixtures "$DV8_TEMPORAL_LOCAL_FIXTURES"
+  --fixtures "$DOVIFUSE_TEMPORAL_LOCAL_FIXTURES"
 "$PYTHON" "$ROOT/scripts/test_p5_disabled.py"
 "$PYTHON" "$ROOT/scripts/audit_standard_source.py"
 "$PYTHON" "$ROOT/scripts/test_job_report.py"
 "$PYTHON" "$ROOT/scripts/audit_faults.py"
 "$PYTHON" "$ROOT/scripts/audit_macos_storage.py"
-if [[ -n ${DV8_AUDIT_SMB_ROOT:-} ]]; then
-  "$PYTHON" "$ROOT/scripts/audit_macos_smb.py" --destination-root "$DV8_AUDIT_SMB_ROOT"
+if [[ -n ${DOVIFUSE_AUDIT_SMB_ROOT:-} ]]; then
+  "$PYTHON" "$ROOT/scripts/audit_macos_smb.py" --destination-root "$DOVIFUSE_AUDIT_SMB_ROOT"
 fi
 "$PYTHON" "$ROOT/scripts/audit_preservation.py"
-DV8_L5_TIMELINE_BIN="$ROOT/dv8_converter/target/release/examples/l5_timeline" \
+DOVIFUSE_L5_TIMELINE_BIN="$ROOT/dovifuse_converter/target/release/examples/l5_timeline" \
   "$PYTHON" "$ROOT/scripts/audit_l5.py"
 # Tests and logs above live in an independently owned /tmp directory.
 codesign --verify --deep --strict "$APP"
-TEST_DIR=$(mktemp -d /tmp/dv8-app-state.XXXXXX)
+TEST_DIR=$(mktemp -d /tmp/dovifuse-app-state.XXXXXX)
 TEST_BIN="$TEST_DIR/test"
 trap 'rm -rf "$TEST_DIR"' EXIT
 xcrun swiftc -swift-version 6 -strict-concurrency=complete -parse-as-library \
-  "$ROOT/macapp/DV8Maker/AppModel.swift" \
-  "$ROOT/macapp/DV8Maker/ScratchCapacity.swift" \
+  "$ROOT/macapp/DoviFuse/AppModel.swift" \
+  "$ROOT/macapp/DoviFuse/ScratchCapacity.swift" \
   "$ROOT/macapp/Tests/AppModelAuditTests.swift" -o "$TEST_BIN"
 "$TEST_BIN"

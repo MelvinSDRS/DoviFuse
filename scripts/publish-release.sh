@@ -16,15 +16,15 @@ if [[ $channel == validated ]]; then
   python3 "$ROOT/scripts/verify_reference_catalog.py" --release
 fi
 
-assets=(DV8-Maker-arm64.dmg DV8-Maker-arm64.dmg.sha256
-        DV8-Maker-sources.tar.gz DV8-Maker-sources.tar.gz.sha256)
+assets=(DoviFuse-arm64.dmg DoviFuse-arm64.dmg.sha256
+        DoviFuse-sources.tar.gz DoviFuse-sources.tar.gz.sha256)
 for asset in "${assets[@]}"; do
   [[ -s dist/$asset ]] || { echo "Missing release asset: $asset" >&2; exit 1; }
 done
-(cd dist && sha256sum --check DV8-Maker-arm64.dmg.sha256 DV8-Maker-sources.tar.gz.sha256)
+(cd dist && sha256sum --check DoviFuse-arm64.dmg.sha256 DoviFuse-sources.tar.gz.sha256)
 
 tag="${channel}-${GITHUB_SHA}"
-title="DV8 Maker ${GITHUB_SHA:0:7}"
+title="DoviFuse ${GITHUB_SHA:0:7}"
 notes=$(mktemp)
 trap 'rm -f "$notes"' EXIT
 {
@@ -32,12 +32,12 @@ trap 'rm -f "$notes"' EXIT
   echo
   echo 'Linux and packaged macOS build and regression checks passed.'
   echo
-  echo 'Download DV8-Maker-arm64.dmg, open it, and drag DV8 Maker into Applications.'
+  echo 'Download DoviFuse-arm64.dmg, open it, and drag DoviFuse into Applications.'
   echo 'The app is ad-hoc signed and not notarized. macOS may require you to allow it in Privacy & Security before opening.'
   echo
   echo 'Use copies of your media. Standard conversion replaces the input after validation; hybrid conversion keeps both sources.'
   echo
-  echo 'SHA-256 files verify the downloads. DV8-Maker-sources.tar.gz contains the release source inventory, bundled upstream source archives, and build instructions. Third-party components retain their own licenses.'
+  echo 'SHA-256 files verify the downloads. DoviFuse-sources.tar.gz contains the release source inventory, bundled upstream source archives, and build instructions. Third-party components retain their own licenses.'
 } > "$notes"
 
 # Stage all assets before exposing a new release. Retrying a failed draft is safe;

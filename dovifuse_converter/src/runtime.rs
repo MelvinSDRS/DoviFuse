@@ -77,7 +77,7 @@ fn resolve_executable_tool_with(candidates: &[PathBuf], version_flag: &str) -> O
 }
 
 pub(crate) fn resolve_script_dir() -> PathBuf {
-    if let Ok(v) = env::var("DV8_SCRIPT_DIR") {
+    if let Ok(v) = env::var("DOVIFUSE_SCRIPT_DIR").or_else(|_| env::var("DV8_SCRIPT_DIR")) {
         let p = PathBuf::from(v);
         if p.exists() {
             return p;
@@ -133,13 +133,14 @@ impl Runtime {
 
 pub(crate) fn build_runtime(cli: &CliArgs) -> AppResult<(Runtime, Logger)> {
     let script_dir = resolve_script_dir();
-    let log_file = env::var("DV8_PROCESSING_LOG_FILE")
+    let log_file = env::var("DOVIFUSE_PROCESSING_LOG_FILE")
+        .or_else(|_| env::var("DV8_PROCESSING_LOG_FILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| script_dir.join("processing_log.txt"));
 
     let output_dir = if let Some(path) = &cli.archive_dir {
         path.clone()
-    } else if let Ok(v) = env::var("DV8_EL_RPU_DIR") {
+    } else if let Ok(v) = env::var("DOVIFUSE_EL_RPU_DIR").or_else(|_| env::var("DV8_EL_RPU_DIR")) {
         PathBuf::from(v)
     } else if Path::new("/NAS").is_dir() {
         PathBuf::from("/NAS/EL_RPU/")
@@ -147,7 +148,7 @@ pub(crate) fn build_runtime(cli: &CliArgs) -> AppResult<(Runtime, Logger)> {
         PathBuf::from("/media/NAS/EL_RPU/")
     };
 
-    let json_file = script_dir.join("config/DV7toDV8.json");
+    let json_file = script_dir.join("config/dovifuse.json");
 
     let mkvextract = resolve_required(&script_dir, "mkvextract")?;
     let mkvmerge = resolve_required(&script_dir, "mkvmerge")?;

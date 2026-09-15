@@ -90,7 +90,7 @@ class ReferenceGateTests(unittest.TestCase):
         (source/SEEDS[0]).write_bytes(b'corrupted')
         output = self.root/'output'
         output.mkdir()
-        with patch.dict(os.environ, DV8_AUDIT_FIXTURES=str(source)):
+        with patch.dict(os.environ, DOVIFUSE_AUDIT_FIXTURES=str(source)):
             with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
                 prepare(output, self.root, None, None, None)
         self.assertEqual(list(output.iterdir()), [])
