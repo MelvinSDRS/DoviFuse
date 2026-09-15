@@ -23,34 +23,46 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  DOVI_TOOL_REV: b25558062e4a56973482ec70133bd7b891320e48
+
 jobs:
-  linux:
-    name: Linux regression gates
+  fixtures:
+    name: Prepare shared synthetic fixtures
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch pinned dovi_tool source and reference metadata
+      - name: Restore prepared synthetic media
+        id: fixtures-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/dovifuse-ci-fixtures
+          key: dovifuse-fixtures-v1-${{ env.DOVI_TOOL_REV }}-${{ hashFiles('scripts/prepare_ci_fixtures.sh', 'scripts/audit_fixtures.py', 'scripts/test_donor_eligibility.py', 'scripts/test_picture_coverage.py', 'scripts/test_temporal_local_edits.py', 'tests/fixtures/*.json') }}
+      - name: Fetch pinned fixture authoring source
+        if: steps.fixtures-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: quietvoid/dovi_tool
-          ref: b25558062e4a56973482ec70133bd7b891320e48
+          ref: ${{ env.DOVI_TOOL_REV }}
           path: dovi_tool
-      - name: Install media test tools
+      - name: Install fixture authoring tools
+        if: steps.fixtures-cache.outputs.cache-hit != 'true'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg mkvtoolnix mediainfo
-      - name: Build pinned dovi_tool
+      - name: Author all disposable media
+        if: steps.fixtures-cache.outputs.cache-hit != 'true'
         run: |
           cargo build --locked --release --manifest-path dovi_tool/Cargo.toml --no-default-features --features internal-font
           mkdir -p tools
           ln -s ../dovi_tool/target/release/dovi_tool tools/dovi_tool
           ln -s /usr/bin/ffmpeg tools/ffmpeg
-      - name: Prepare disposable media for both platforms
-        run: python3 scripts/audit_fixtures.py /tmp/dovifuse-ci-fixtures
-      - name: Rust, real tools and wrapper regression gates
-        env:
-          DOVIFUSE_AUDIT_FIXTURES: /tmp/dovifuse-ci-fixtures
-          PYTHONOPTIMIZE: ''
-        run: ./scripts/test-linux.sh
+          ./scripts/prepare_ci_fixtures.sh /tmp/dovifuse-ci-fixtures
+      - name: Save prepared synthetic media
+        if: steps.fixtures-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/dovifuse-ci-fixtures
+          key: ${{ steps.fixtures-cache.outputs.cache-primary-key }}
       - name: Share only prepared test media
         uses: actions/upload-artifact@v4
         with:
@@ -65,6 +77,59 @@ jobs:
             /tmp/dovifuse-ci-fixtures/temporal-local/manifest.json
             /tmp/dovifuse-ci-fixtures/temporal-local/*.mkv
           if-no-files-found: error
+
+  linux:
+    name: Linux regression gates
+    needs: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned dovi_tool source and reference metadata
+        uses: actions/checkout@v4
+        with:
+          repository: quietvoid/dovi_tool
+          ref: ${{ env.DOVI_TOOL_REV }}
+          path: dovi_tool
+      - name: Restore Rust build dependencies
+        id: linux-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            dovi_tool/target
+            dovifuse_converter/target
+          key: dovifuse-linux-v1-${{ hashFiles('dovifuse_converter/Cargo.lock', 'dovi_tool/Cargo.lock') }}
+      - name: Install media test tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg mkvtoolnix mediainfo
+      - name: Download prepared disposable media
+        uses: actions/download-artifact@v4
+        with:
+          name: synthetic-mechanics-fixtures
+          path: /tmp/dovifuse-ci-fixtures
+      - name: Build pinned dovi_tool
+        run: |
+          cargo build --locked --release --manifest-path dovi_tool/Cargo.toml --no-default-features --features internal-font
+          mkdir -p tools
+          ln -s ../dovi_tool/target/release/dovi_tool tools/dovi_tool
+          ln -s /usr/bin/ffmpeg tools/ffmpeg
+      - name: Rust, real tools and wrapper regression gates
+        id: linux-tests
+        env:
+          DOVIFUSE_AUDIT_FIXTURES: /tmp/dovifuse-ci-fixtures
+          PYTHONOPTIMIZE: ''
+        run: ./scripts/test-linux.sh
+      - name: Save Rust build dependencies
+        if: always() && steps.linux-tests.outcome == 'success' && steps.linux-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            dovi_tool/target
+            dovifuse_converter/target
+          key: ${{ steps.linux-cache.outputs.cache-primary-key }}
       - name: Preserve Linux test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -120,7 +185,7 @@ jobs:
 
   macos:
     name: Build, test and package Apple Silicon app
-    needs: [linux, macos-rendering]
+    needs: fixtures
     runs-on: macos-15
     timeout-minutes: 120
 
@@ -132,7 +197,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: quietvoid/dovi_tool
-          ref: b25558062e4a56973482ec70133bd7b891320e48
+          ref: ${{ env.DOVI_TOOL_REV }}
           path: dovi_tool
 
       - name: Download prepared disposable media
@@ -256,7 +321,7 @@ jobs:
 
   publish:
     name: Publish verified DMG
-    needs: macos
+    needs: [fixtures, linux, macos-rendering, macos]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     permissions:
@@ -268,7 +333,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: quietvoid/dovi_tool
-          ref: b25558062e4a56973482ec70133bd7b891320e48
+          ref: ${{ env.DOVI_TOOL_REV }}
           path: dovi_tool
       - uses: actions/download-artifact@v4
         with:
