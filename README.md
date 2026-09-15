@@ -1,8 +1,62 @@
-# DV7 to DV8 Conversion Toolkit
+# DV8 Maker
 
-This project converts Dolby Vision Profile 7 MKV files to Profile 8, builds **DV Profile 8 hybrids** (inject DV metadata from a WEB-DL into an HDR10 remux), and includes an automation wrapper for qBittorrent workflows.
+DV8 Maker is a personal experimental project for working with Dolby Vision MKV
+media. It addresses two recurring tasks: converting Dolby Vision Profile 7
+material to Profile 8, and building Profile 8 hybrids by pairing DV metadata
+with an HDR10 base. It combines a Rust conversion engine, a native macOS app,
+and automation for repeatable conversion and inspection.
 
-Supported workflows are standard DV7→DV8 conversion, P7/P8 hybrids, checking and sync repair. Profile 5 is unsupported, including overrides; its development is preserved on `codex/p5-workflow`.
+**Status: experimental.** This personal project shares the implementation and
+engineering approach. Automated checks cover conversion mechanics and failure
+handling; full-length playback acceptance remains pending.
+
+The supported workflows on `main` are:
+
+- Standard DV Profile 7 → Profile 8 conversion.
+- Profile 7 and Profile 8 hybrid creation with supported donors and HDR10
+  targets.
+- Read-only checking and checker-guided sync repair.
+
+Profile 5 is unsupported on `main`, including with overrides. P5 experiments,
+diagnostics and research remain on the unpublished development branch
+`codex/p5-workflow`, which is not included in this repository's published branches.
+
+> **Use media copies.** Standard mode replaces the original input in place only
+> after successful output validation. Hybrid mode always keeps both source
+> files. Review the output and saved report before any separate cleanup.
+
+## What this project contains
+
+- The Rust orchestration in `dv8_converter/` probes media, coordinates
+  `dovi_tool`, FFmpeg and Matroska operations, checks sync and metadata,
+  records job reports, and preserves failure artifacts for inspection.
+- The native SwiftUI app in `macapp/` provides the desktop workflow around the
+  same conversion, checking, validation and reporting paths. See
+  [`macapp/README.md`](macapp/README.md) for build and packaging notes.
+- `DV7toDV8.sh` launches the converter, while `qbt_autorun_wrapper.sh` handles
+  optional qBittorrent queue automation.
+
+The safeguards described here are implementation checks and recorded evidence;
+they do not establish creative-grade equivalence or Dolby-capable playback.
+
+## External projects
+
+DV8 Maker builds on these external projects:
+
+- [`dovi_tool`](https://github.com/quietvoid/dovi_tool) — Dolby Vision RPU
+  extraction, editing and injection.
+- [FFmpeg](https://ffmpeg.org/) — media probing, decoding, scene analysis and
+  measurements.
+- [MKVToolNix](https://mkvtoolnix.download/) — Matroska extraction and remuxing.
+- [MediaInfo](https://mediaarea.net/MediaInfo) — media metadata inspection.
+
+## License
+
+The original DV8 Maker source code and documentation are licensed under the
+[MIT License](LICENSE). External tools and vendored components retain their
+own licenses; refer to their project pages and bundled notices where provided.
+App icons and other artwork are outside this source-code license grant unless
+separately stated.
 
 ## Overview
 
