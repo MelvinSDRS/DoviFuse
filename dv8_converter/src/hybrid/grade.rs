@@ -16,11 +16,11 @@
 
 use std::path::Path;
 
+use super::observations::MeasurementObservations;
 use crate::cli::GradeCheckMode;
 use crate::exec::AppResult;
 use crate::ffmpeg::{
-    cropdetect_window, measure_luma_window, plausible_crop as ffmpeg_plausible_crop,
-    sample_windows, CropRect, FrameLuma, SampleWindow,
+    measure_luma_window, sample_windows, CropRect, FrameLuma, SampleWindow, CROPDETECT_LIMIT,
 };
 use crate::logger::Logger;
 use crate::mediainfo::HybridMediaInfo;
@@ -30,7 +30,7 @@ use serde::Serialize;
 
 /// Mean |delta PQ| of YAVG above which a window is graded differently.
 const WINDOW_DELTA_PQ_FAIL: f64 = 0.015;
-/// p99 YMAX nits ratio above which the peak brightness differs.
+/// p99 PQ(Y) peak-surrogate nits ratio above which the brightness differs.
 const PEAK_RATIO_FAIL: f64 = 1.5;
 /// Overlapping frames required for a window comparison to count.
 const MIN_OVERLAP_FRAMES: usize = 24;
@@ -39,9 +39,6 @@ const DV_WINDOW_PAD_S: f64 = 2.0;
 /// Skip the peak-ratio check when both p99 values are this dark (ratio of
 /// near-black values is meaningless).
 const PEAK_MIN_NITS: f64 = 50.0;
-/// cropdetect threshold used to exclude letterbox bars from measurement
-/// (bars in one source but not the other would skew YAVG).
-const GRADE_CROP_LIMIT: f64 = 0.08;
 /// Every scored interval is bounded to five seconds, including full mode.
 const GRADE_INTERVAL_S: f64 = 5.0;
 /// Coarse normalized chroma delta that is large enough to screen a likely
@@ -163,9 +160,7 @@ pub(crate) fn static_grade_verdict(
 /// and near-full-frame on the other fabricates a grade mismatch. Real bars
 /// only ever shrink one axis strongly: require each axis >= 50% of the canvas
 /// and the area >= 40% (windowboxed 4:3-in-scope is ~42%).
-pub(crate) fn plausible_crop(crop: &CropRect, canvas_w: u32, canvas_h: u32) -> bool {
-    ffmpeg_plausible_crop(crop, canvas_w, canvas_h)
-}
+pub(crate) use crate::ffmpeg::plausible_crop;
 
 /// Find the lag (dv index minus hdr index) minimizing mean |delta| between
 /// two PQ series, requiring enough overlap. Returns (lag, mean_abs_delta).
@@ -283,6 +278,51 @@ struct RequestedWindow {
     lag_range: std::ops::RangeInclusive<i64>,
 }
 
+/// Produce the target-side windows after the same CFR rounding used by the
+/// grade check. Letterbox measurement uses this helper so an active-area
+/// probe can reuse the grade check's target crop observation exactly. Keep a
+/// raw window when its declared frame count makes the request empty so the
+/// caller still reports that requested coverage instead of dropping it.
+pub(crate) fn sampled_target_windows(
+    duration_s: f64,
+    window_count: usize,
+    fps: f64,
+    target_frame_count: u64,
+) -> Vec<SampleWindow> {
+    if !fps.is_finite() || fps <= 0.0 {
+        return Vec::new();
+    }
+    sample_windows(duration_s, window_count, GRADE_INTERVAL_S)
+        .into_iter()
+        .map(|window| canonical_target_window(&window, fps, target_frame_count).unwrap_or(window))
+        .collect()
+}
+
+fn requested_frame_range(window: &SampleWindow, fps: f64, target_frame_count: u64) -> (u64, u64) {
+    let target_start = (window.start_s * fps).round().max(0.0) as u64;
+    let target_len = (window.dur_s * fps).round().max(1.0) as u64;
+    let target_end = if target_frame_count > 0 {
+        target_start
+            .saturating_add(target_len)
+            .min(target_frame_count)
+    } else {
+        target_start.saturating_add(target_len)
+    };
+    (target_start, target_end)
+}
+
+fn canonical_target_window(
+    window: &SampleWindow,
+    fps: f64,
+    target_frame_count: u64,
+) -> Option<SampleWindow> {
+    let (target_start, target_end) = requested_frame_range(window, fps, target_frame_count);
+    (target_end > target_start).then_some(SampleWindow {
+        start_s: target_start as f64 / fps,
+        dur_s: target_end.saturating_sub(target_start) as f64 / fps,
+    })
+}
+
 struct WindowMeasurement {
     evidence: GradeWindowEvidence,
     hdr_peaks_nits: Vec<f64>,
@@ -313,15 +353,7 @@ fn sample_request(
     pad_frames: i64,
     target_frame_count: u64,
 ) -> RequestedWindow {
-    let target_start = (window.start_s * fps).round().max(0.0) as u64;
-    let target_len = (window.dur_s * fps).round().max(1.0) as u64;
-    let target_end = if target_frame_count > 0 {
-        target_start
-            .saturating_add(target_len)
-            .min(target_frame_count)
-    } else {
-        target_start.saturating_add(target_len)
-    };
+    let (target_start, target_end) = requested_frame_range(window, fps, target_frame_count);
     let donor_start_i = target_start as i128 + offset_frames as i128;
     let donor_end_i = target_end as i128 + offset_frames as i128;
     let donor_start = donor_start_i.max(0) as u64;
@@ -570,6 +602,7 @@ fn format_window_log(window: &GradeWindowEvidence) -> String {
 pub(crate) fn run_grade_check(
     rt: &Runtime,
     logger: &Logger,
+    observations: &mut MeasurementObservations,
     dv_source: &Path,
     hdr_target: &Path,
     dv_info: &HybridMediaInfo,
@@ -628,9 +661,13 @@ pub(crate) fn run_grade_check(
             requested = sampled.len();
             let pad_frames = (DV_WINDOW_PAD_S * fps).ceil() as i64;
             for (index, original) in sampled.iter().enumerate() {
+                // Keep the raw sampled count and invalid-coverage evidence,
+                // while using the canonical CFR window for every valid probe.
+                let target_window = canonical_target_window(original, fps, hdr_info.frame_count)
+                    .unwrap_or(*original);
                 let request = sample_request(
                     index + 1,
-                    original,
+                    &target_window,
                     fps,
                     offset_frames,
                     pad_frames,
@@ -651,12 +688,12 @@ pub(crate) fn run_grade_check(
                     continue;
                 }
 
-                let hdr_crop = match cropdetect_window(
+                let hdr_crop = match observations.cropdetect(
                     rt,
                     logger,
                     hdr_target,
                     &request.target_decode,
-                    GRADE_CROP_LIMIT,
+                    CROPDETECT_LIMIT,
                 ) {
                     Ok(crop) => crop,
                     Err(error) => {
@@ -673,12 +710,12 @@ pub(crate) fn run_grade_check(
                         );
                     }
                 };
-                let dv_crop = match cropdetect_window(
+                let dv_crop = match observations.cropdetect(
                     rt,
                     logger,
                     dv_source,
                     &request.donor_decode,
-                    GRADE_CROP_LIMIT,
+                    CROPDETECT_LIMIT,
                 ) {
                     Ok(crop) => crop,
                     Err(error) => {
@@ -859,32 +896,42 @@ pub(crate) fn run_grade_check(
                 start_s: ((target_count / 2) as i64 + offset_frames).max(0) as f64 / fps,
                 dur_s: mid_target.dur_s,
             };
-            let hdr_crop =
-                match cropdetect_window(rt, logger, hdr_target, &mid_target, GRADE_CROP_LIMIT) {
-                    Ok(crop) => crop,
-                    Err(error) => {
-                        return log_grade_failure(
-                            logger,
-                            mode,
-                            0,
-                            &[],
-                            format!("target cropdetect failed: {error}"),
-                        )
-                    }
-                };
-            let dv_crop =
-                match cropdetect_window(rt, logger, dv_source, &mid_donor, GRADE_CROP_LIMIT) {
-                    Ok(crop) => crop,
-                    Err(error) => {
-                        return log_grade_failure(
-                            logger,
-                            mode,
-                            0,
-                            &[],
-                            format!("donor cropdetect failed: {error}"),
-                        )
-                    }
-                };
+            let hdr_crop = match observations.cropdetect(
+                rt,
+                logger,
+                hdr_target,
+                &mid_target,
+                CROPDETECT_LIMIT,
+            ) {
+                Ok(crop) => crop,
+                Err(error) => {
+                    return log_grade_failure(
+                        logger,
+                        mode,
+                        0,
+                        &[],
+                        format!("target cropdetect failed: {error}"),
+                    )
+                }
+            };
+            let dv_crop = match observations.cropdetect(
+                rt,
+                logger,
+                dv_source,
+                &mid_donor,
+                CROPDETECT_LIMIT,
+            ) {
+                Ok(crop) => crop,
+                Err(error) => {
+                    return log_grade_failure(
+                        logger,
+                        mode,
+                        0,
+                        &[],
+                        format!("donor cropdetect failed: {error}"),
+                    )
+                }
+            };
             if !crop_is_usable(&hdr_crop, hdr_info) || !crop_is_usable(&dv_crop, dv_info) {
                 return log_grade_failure(
                     logger,
@@ -1218,6 +1265,26 @@ mod tests {
         let v: Vec<f64> = (1..=1000).map(f64::from).collect();
         assert_eq!(p99(&v), 991.0);
         assert_eq!(p99(&[]), 0.0);
+    }
+
+    #[test]
+    fn sampled_target_windows_are_cfr_quantized_for_reuse() {
+        let windows = sampled_target_windows(240.0, 6, 23.976, 240 * 24);
+        assert_eq!(windows.len(), 6);
+        for window in windows {
+            let start = window.start_s * 23.976;
+            let length = window.dur_s * 23.976;
+            assert!((start - start.round()).abs() < 1e-9);
+            assert!((length - length.round()).abs() < 1e-9);
+            assert!(length >= 1.0);
+        }
+    }
+
+    #[test]
+    fn sampled_target_windows_keep_empty_declared_coverage() {
+        let raw = sample_windows(240.0, 6, GRADE_INTERVAL_S);
+        let requested = sampled_target_windows(240.0, 6, 23.976, 1);
+        assert_eq!(requested, raw);
     }
 
     fn frame_series(count: usize, yavg: f64, uavg: f64, vavg: f64) -> Vec<FrameLuma> {

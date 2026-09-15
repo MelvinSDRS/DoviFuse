@@ -106,6 +106,7 @@ pub(crate) enum SyncMode {
 /// Options that only apply to --hybrid runs.
 #[derive(Clone)]
 pub(crate) struct HybridOptions {
+    /// Deprecated compatibility flag; never authorizes source deletion.
     pub(crate) delete_sources: bool,
     pub(crate) sync: SyncMode,
     pub(crate) force: bool,
@@ -166,8 +167,6 @@ Options:\n\
   -h, --help  Show this help message\n\
 \n\
 Hybrid-only options:\n\
-  --delete-sources  Request input deletion (withheld while active-area coverage is unverified)\n\
-                    (default: keep both originals)\n\
   --sync <mode>     Alignment mode: scenes (scene-cut correlation, default)\n\
                     or framecount (equal-count check; unequal counts require --offset)\n\
   --offset <frames> Explicit alignment, dv_frame = hdr_frame + offset\n\

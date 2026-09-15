@@ -9,17 +9,16 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 
+use super::observations::MeasurementObservations;
 use crate::exec::{run_status, AppResult};
 use crate::ffmpeg::{
-    cropdetect_window, measure_luma_window, plausible_crop, CropRect, FrameLuma, SampleWindow,
+    measure_luma_window, plausible_crop, CropRect, FrameLuma, SampleWindow, CROPDETECT_LIMIT,
 };
 use crate::logger::Logger;
 use crate::pq::code_limited_to_pq;
 use crate::runtime::Runtime;
 use serde::Serialize;
 
-/// cropdetect luma threshold: PQ-encoded black bars are well below 8% code.
-const CROP_LIMIT: f64 = 0.08;
 /// Per-edge disagreement between windows above which the film likely has a
 /// variable aspect ratio (IMAX inserts).
 const VARIABLE_AR_PX: u32 = 8;
@@ -249,6 +248,7 @@ pub(crate) fn dv_rpu_l5_presets(
 pub(crate) fn measure_letterbox(
     rt: &Runtime,
     logger: &Logger,
+    measurement_cache: &mut MeasurementObservations,
     file: &Path,
     windows: &[SampleWindow],
     canvas_w: u32,
@@ -280,7 +280,7 @@ pub(crate) fn measure_letterbox(
             });
             continue;
         }
-        let crop = match cropdetect_window(rt, logger, file, w, CROP_LIMIT) {
+        let crop = match measurement_cache.cropdetect(rt, logger, file, w, CROPDETECT_LIMIT) {
             Ok(crop) => crop,
             Err(error) => {
                 observations.push(LetterboxWindowObservation {

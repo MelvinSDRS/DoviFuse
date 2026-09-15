@@ -165,6 +165,8 @@ grade. Adequately observed stable bars can supply a constant target L5 edit.
 Temporal edits run before target-indexed L5 edits. The pipeline then injects,
 remuxes, decodes the output and verifies metadata and container transport.
 Scene anchors and sampled crops do not establish whole-film picture alignment.
+Input probe results and equivalent crop observations are reused within each job.
+Output checks inspect newly produced media; no measurements are cached across jobs.
 
 Complete target HDR10 static fields are applied to L6 on every hybrid RPU,
 even when donor and target container tags match. The mastering minimum uses
@@ -207,9 +209,9 @@ Hybrid-only flags:
   measured mode. Short changes between samples remain unverified.
   `off` retains existing donor L5 after review. The old `resolution` option is
   rejected: dimensions alone cannot distinguish scaling, padding and cropping.
-- `--delete-sources`: request input deletion; currently withheld because
-  full-timeline active-picture/L5 validation remains inconclusive. Both inputs
-  are retained even when this flag is supplied.
+- Both source files are always retained. The legacy `--delete-sources` flag
+  is deprecated, hidden from help, and ignored with a warning. Remove sources
+  separately after reviewing the result.
 
 Scene correlation estimates a global offset. Job reports (`--report <path>`,
 automatic in the app) retain matched anchors,

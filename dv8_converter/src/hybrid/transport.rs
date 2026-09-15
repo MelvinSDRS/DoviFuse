@@ -39,6 +39,15 @@ pub(crate) fn capture(
             OsString::from(format!("all={}", export.display())),
         ],
     )?;
+    read_export(export, frames, target_l6)
+}
+
+/// Reuse an all-RPU export already inspected by another verification gate.
+pub(crate) fn read_export(
+    export: &Path,
+    frames: u64,
+    target_l6: Option<&Value>,
+) -> AppResult<Metadata> {
     let file = File::open(export).map_err(|e| format!("Metadata transport export: {e}"))?;
     read_metadata(BufReader::new(file), frames, target_l6)
 }

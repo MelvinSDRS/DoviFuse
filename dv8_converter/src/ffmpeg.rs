@@ -229,6 +229,13 @@ pub(crate) struct CropRect {
     pub(crate) y: u32,
 }
 
+/// Shared cropdetect threshold used by grade and active-area measurements.
+pub(crate) const CROPDETECT_LIMIT: f64 = 0.08;
+
+pub(crate) fn cropdetect_filter(limit: f64) -> String {
+    format!("cropdetect=limit={limit}:round=2:reset=0")
+}
+
 /// Shared plausibility screen: legal bounds alone can describe a small lit
 /// object in a dark picture. Require at least half each axis and 40% area.
 pub(crate) fn plausible_crop(crop: &CropRect, canvas_w: u32, canvas_h: u32) -> bool {
@@ -413,7 +420,7 @@ pub(crate) fn cropdetect_window(
     limit: f64,
 ) -> AppResult<Option<CropRect>> {
     let ffmpeg = rt.require_ffmpeg()?;
-    let filter = format!("cropdetect=limit={limit}:round=2:reset=0");
+    let filter = cropdetect_filter(limit);
     let mut args = vec![
         OsString::from("-nostdin"),
         OsString::from("-hide_banner"),

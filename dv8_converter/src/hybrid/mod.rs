@@ -6,6 +6,7 @@ pub(crate) mod grade;
 pub(crate) mod l5;
 pub(crate) mod letterbox;
 mod mapping;
+mod observations;
 pub(crate) mod preflight;
 pub(crate) mod scenes;
 mod transport;
@@ -20,9 +21,7 @@ use crate::exec::{run_status, AppResult, CleanupGuard};
 use crate::ffmpeg::detect_scene_cuts;
 use crate::fsutil::{check_disk_space_hybrid, create_job_dir};
 use crate::logger::Logger;
-use crate::mediainfo::{
-    fps_from_info, get_hevc_track_id, hybrid_detect_dv_profile, hybrid_get_media_info,
-};
+use crate::mediainfo::{fps_from_info, InputProbe};
 use crate::runtime::Runtime;
 
 use align::{
@@ -410,12 +409,20 @@ fn process_hybrid_impl(
     logger.step("0 | Determine output path");
     logger.ok(&format!("Hybrid output: {}", output_path.display()));
 
+    if opts.delete_sources {
+        logger.warn("--delete-sources is deprecated and ignored for hybrids; both originals are always retained. Remove sources separately after review.");
+    }
+
     logger.step("1 | Gather media info");
-    get_hevc_track_id(dv_source, rt, logger)?;
-    get_hevc_track_id(hdr_target, rt, logger)?;
-    let dv_info = hybrid_get_media_info(dv_source, rt, logger)?;
-    let hdr_info = hybrid_get_media_info(hdr_target, rt, logger)?;
-    let target_profile = hybrid_detect_dv_profile(hdr_target, rt, logger)?;
+    let donor_probe = InputProbe::inspect(dv_source, rt, logger)?;
+    let target_probe = if dv_source == hdr_target {
+        donor_probe.clone()
+    } else {
+        InputProbe::inspect(hdr_target, rt, logger)?
+    };
+    let dv_info = &donor_probe.media_info;
+    let hdr_info = &target_probe.media_info;
+    let target_profile = target_probe.dv_profile;
     if (!allow_same_input && target_profile.is_some())
         || (allow_same_input && target_profile != Some(8))
     {
@@ -425,7 +432,7 @@ fn process_hybrid_impl(
     }
 
     logger.step("2 | Detect DV profile");
-    let dv_profile = hybrid_detect_dv_profile(dv_source, rt, logger)?;
+    let dv_profile = donor_probe.dv_profile;
     logger.ok(&format!(
         "Detected DV profile: {}",
         dv_profile
@@ -434,7 +441,7 @@ fn process_hybrid_impl(
     ));
 
     logger.step("3 | Preflight checks");
-    let has_fail = hybrid_preflight_checks(&dv_info, &hdr_info, dv_profile, opts, logger);
+    let has_fail = hybrid_preflight_checks(dv_info, hdr_info, dv_profile, opts, logger);
     if has_fail {
         return Err("Hybrid preflight failed".to_string());
     }
@@ -461,11 +468,7 @@ fn process_hybrid_impl(
             hdr_target.display()
         ));
         logger.ok("[DRY RUN] Would inject RPU and remux final MKV");
-        if opts.delete_sources {
-            logger.ok("[DRY RUN] Would validate output and delete both originals on success (--delete-sources)");
-        } else {
-            logger.ok("[DRY RUN] Would validate output and keep both originals");
-        }
+        logger.ok("[DRY RUN] Would validate output and keep both originals");
         if emit_completed {
             logger.completed(&output_path);
         }
@@ -513,8 +516,8 @@ fn process_hybrid_impl(
     };
 
     logger.step("6 | Compute alignment strategy");
-    let fps = fps_from_info(&hdr_info)
-        .or_else(|| fps_from_info(&dv_info))
+    let fps = fps_from_info(hdr_info)
+        .or_else(|| fps_from_info(dv_info))
         .unwrap_or(23.976);
 
     let strategy = compute_alignment(
@@ -539,6 +542,7 @@ fn process_hybrid_impl(
         logger.warn("Alignment repeats edge metadata; the padded pictures remain unverified");
     }
 
+    let mut observations = observations::MeasurementObservations::new();
     logger.step("7 | Brightness/chroma screening");
     if opts.skip_grade_check {
         logger.warn("Grade check skipped (--skip-grade-check)");
@@ -548,10 +552,11 @@ fn process_hybrid_impl(
         let outcome = run_grade_check(
             rt,
             logger,
+            &mut observations,
             dv_source,
             hdr_target,
-            &dv_info,
-            &hdr_info,
+            dv_info,
+            hdr_info,
             strategy.start_offset,
             fps,
             opts.grade_check,
@@ -612,7 +617,12 @@ fn process_hybrid_impl(
                 .duration_ms
                 .map(|ms| ms / 1000.0)
                 .unwrap_or_else(|| hdr_info.frame_count as f64 / fps.max(1.0));
-            let windows = crate::ffmpeg::sample_windows(duration_s, opts.grade_windows, 5.0);
+            let windows = grade::sampled_target_windows(
+                duration_s,
+                opts.grade_windows,
+                fps,
+                hdr_info.frame_count,
+            );
             let (canvas_w, canvas_h) = match (hdr_info.width, hdr_info.height) {
                 (Some(w), Some(h)) => (w, h),
                 _ => {
@@ -621,7 +631,15 @@ fn process_hybrid_impl(
                     )
                 }
             };
-            let measured = measure_letterbox(rt, logger, hdr_target, &windows, canvas_w, canvas_h)?;
+            let measured = measure_letterbox(
+                rt,
+                logger,
+                &mut observations,
+                hdr_target,
+                &windows,
+                canvas_w,
+                canvas_h,
+            )?;
             let dv_presets = dv_rpu_l5_presets(&hybrid_rpu, &hybrid_l5_json, rt, logger)?;
             let canvas_match = dv_info.width == hdr_info.width
                 && dv_info.height == hdr_info.height
@@ -646,8 +664,8 @@ fn process_hybrid_impl(
     hybrid_build_editor_json(
         &strategy,
         mapping_policy,
-        &dv_info,
-        &hdr_info,
+        dv_info,
+        hdr_info,
         if matches!(active_area, ActiveAreaChoice::Measured(_)) {
             &ActiveAreaChoice::Keep
         } else {
@@ -736,7 +754,7 @@ fn process_hybrid_impl(
     }
 
     logger.step("10 | Extract HEVC from HDR target");
-    let track_id = get_hevc_track_id(hdr_target, rt, logger)?;
+    let track_id = target_probe.hevc_track_id;
     let remux_source = crate::remux::RemuxSource::read(hdr_target, rt, logger)?;
     run_status(
         logger,
@@ -838,7 +856,7 @@ fn process_hybrid_impl(
     remux_source
         .verify(&output_path, rt, logger)
         .map_err(fail_output)?;
-    if let Err(e) = hybrid_validate_output(&output_path, hdr_target, rt, logger) {
+    if let Err(e) = hybrid_validate_output(&output_path, &target_probe, rt, logger) {
         return Err(fail_output(e));
     }
 
@@ -894,14 +912,19 @@ fn process_hybrid_impl(
         );
     }
 
-    let actual_metadata = transport::capture(
-        &verify_rpu,
-        &transport_json,
-        hdr_info.frame_count,
-        None,
-        rt,
-        logger,
-    )
+    let actual_metadata = if allow_same_input {
+        transport::capture(
+            &verify_rpu,
+            &transport_json,
+            hdr_info.frame_count,
+            None,
+            rt,
+            logger,
+        )
+    } else {
+        // Mapping verification just exported these same output RPUs.
+        transport::read_export(&mapping_json, hdr_info.frame_count, None)
+    }
     .map_err(fail_output)?;
     if let Err(error) = transport::verify(&expected_metadata, &actual_metadata) {
         logger.check_result(
@@ -932,9 +955,6 @@ fn process_hybrid_impl(
     }
     cleanup.clear();
 
-    if opts.delete_sources {
-        logger.warn("Keeping both source files: active-area picture validation does not yet cover the full timeline; --delete-sources withheld");
-    }
     logger.ok("Keeping both source files");
 
     logger.log(&format!(

@@ -39,6 +39,7 @@ if [[ ! -f "$DV8_PICTURE_FIXTURES/manifest.json" ]]; then
   python3 scripts/test_picture_coverage.py --prepare
 fi
 python3 scripts/test_picture_coverage.py
+python3 scripts/test_p2_reuse.py
 export DV8_TEMPORAL_LOCAL_FIXTURES="${DV8_TEMPORAL_LOCAL_FIXTURES:-$DV8_AUDIT_FIXTURES/temporal-local}"
 if [[ ! -f "$DV8_TEMPORAL_LOCAL_FIXTURES/manifest.json" ]]; then
   python3 scripts/test_temporal_local_edits.py --prepare "$DV8_TEMPORAL_LOCAL_FIXTURES"

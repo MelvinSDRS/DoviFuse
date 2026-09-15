@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::exec::{run_capture, AppResult};
 use crate::logger::Logger;
@@ -36,6 +36,20 @@ pub(crate) struct HybridMediaInfo {
     pub(crate) mastering_min_nits: Option<f64>,
     pub(crate) mastering_max_nits: Option<f64>,
     pub(crate) static_metadata_errors: Vec<String>,
+}
+
+/// The input facts collected once for a hybrid job.
+///
+/// The source path is kept with the facts so callers cannot accidentally use
+/// a probe from a different input. This is deliberately a per-job value, not
+/// a process-wide cache: output validation still probes the finished output
+/// independently.
+#[derive(Clone)]
+pub(crate) struct InputProbe {
+    pub(crate) source: PathBuf,
+    pub(crate) media_info: HybridMediaInfo,
+    pub(crate) dv_profile: Option<u8>,
+    pub(crate) hevc_track_id: u64,
 }
 
 pub(crate) fn parse_int(s: &str) -> Option<u64> {
@@ -151,6 +165,27 @@ pub(crate) fn get_hevc_track_id(file: &Path, rt: &Runtime, logger: &Logger) -> A
     }
 
     Err(format!("No HEVC video track found in {}", file.display()))
+}
+
+impl InputProbe {
+    /// Inspect one hybrid input and retain all facts needed by the job.
+    ///
+    /// `get_hevc_track_id` enforces the same single-HEVC-video invariant that
+    /// `parse_hybrid_media_info` uses when selecting the HEVC line. Keeping
+    /// both results here prevents later stages from re-probing the target and
+    /// accidentally describing a different input or track.
+    pub(crate) fn inspect(source: &Path, rt: &Runtime, logger: &Logger) -> AppResult<Self> {
+        let hevc_track_id = get_hevc_track_id(source, rt, logger)?;
+        let media_info = hybrid_get_media_info(source, rt, logger)?;
+        let dv_profile = hybrid_detect_dv_profile_from_info(&media_info);
+
+        Ok(Self {
+            source: source.to_path_buf(),
+            media_info,
+            dv_profile,
+            hevc_track_id,
+        })
+    }
 }
 
 pub(crate) fn has_hdr10_base(info: &HybridMediaInfo) -> bool {
@@ -488,6 +523,36 @@ pub(crate) fn hybrid_get_media_info(
         .ok_or_else(|| format!("No mediainfo video output for {}", file.display()))
 }
 
+fn detect_dv_profile_text(text: &str) -> Option<u8> {
+    let lower = text.to_lowercase();
+
+    if lower.contains("dvhe.05") || lower.contains("profile 5") || lower.contains("profile: 5") {
+        return Some(5);
+    }
+    if lower.contains("dvhe.07") || lower.contains("profile 7") || lower.contains("profile: 7") {
+        return Some(7);
+    }
+    if lower.contains("dvhe.08")
+        || lower.contains("profile 8")
+        || lower.contains("profile: 8")
+        || lower.contains("profile 8.1")
+    {
+        return Some(8);
+    }
+
+    None
+}
+
+/// Detect the broad Dolby Vision profile family from the already selected
+/// MediaInfo video track. The input probe has already enforced that this is
+/// the HEVC track selected for extraction.
+pub(crate) fn hybrid_detect_dv_profile_from_info(info: &HybridMediaInfo) -> Option<u8> {
+    detect_dv_profile_text(&format!(
+        "{}|{}|{}",
+        info.hdr_format, info.hdr_format_profile, info.codec_id
+    ))
+}
+
 pub(crate) fn hybrid_detect_dv_profile(
     file: &Path,
     rt: &Runtime,
@@ -501,23 +566,7 @@ pub(crate) fn hybrid_detect_dv_profile(
             file.as_os_str().to_os_string(),
         ],
     )?;
-    let lower = out.to_lowercase();
-
-    if lower.contains("dvhe.05") || lower.contains("profile 5") || lower.contains("profile: 5") {
-        return Ok(Some(5));
-    }
-    if lower.contains("dvhe.07") || lower.contains("profile 7") || lower.contains("profile: 7") {
-        return Ok(Some(7));
-    }
-    if lower.contains("dvhe.08")
-        || lower.contains("profile 8")
-        || lower.contains("profile: 8")
-        || lower.contains("profile 8.1")
-    {
-        return Ok(Some(8));
-    }
-
-    Ok(None)
+    Ok(detect_dv_profile_text(&out))
 }
 
 pub(crate) fn hybrid_get_hdr_compatibility(
@@ -640,6 +689,21 @@ mod tests {
         let out = "AV1|V_AV1|500|24.000|||||1920|1080|10|BT.2020|PQ|CFR|||||";
         let info = parse_hybrid_media_info(out).unwrap();
         assert_eq!(info.codec, "AV1");
+    }
+
+    #[test]
+    fn input_probe_profile_uses_the_selected_hevc_track_fields() {
+        let out = format!("V_MJPEG|V_MJPEG|1||||40.000||320|180|8|||VFR||||Profile 5\n{HEVC_LINE}");
+        let info = parse_hybrid_media_info(&out).unwrap();
+        assert_eq!(hybrid_detect_dv_profile_from_info(&info), Some(8));
+
+        let p7 = HEVC_LINE.replace("Profile 8.1", "Profile 7");
+        let p7_info = parse_hybrid_media_info(&p7).unwrap();
+        assert_eq!(hybrid_detect_dv_profile_from_info(&p7_info), Some(7));
+
+        let p5 = HEVC_LINE.replace("Profile 8.1", "Profile 5");
+        let p5_info = parse_hybrid_media_info(&p5).unwrap();
+        assert_eq!(hybrid_detect_dv_profile_from_info(&p5_info), Some(5));
     }
 
     fn eligible_info(profile: &str) -> HybridMediaInfo {

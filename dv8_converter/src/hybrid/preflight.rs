@@ -151,9 +151,8 @@ pub(crate) fn hybrid_preflight_checks(
             logger.preflight_status("FAIL", &format!("9. Unsupported DV profile {p}"));
             has_fail = true;
         }
-        // An undetected profile would silently get mode 2; if the source is
-        // actually P5 that skips the IPT-PQ-c2 conversion and produces a
-        // broken P8-labelled output.
+        // A supported profile must be explicit before mapping policy can
+        // select any editor mode. Overrides cannot authorize guessing.
         None => {
             logger.preflight_status(
                 "FAIL",

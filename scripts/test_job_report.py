@@ -43,7 +43,13 @@ run('runtime',['--check','--report',runtime,source],False,dict(ENV,PATH=str(fake
 assert json.loads(runtime.read_text())['execution']=='failed'
 # Dry runs record planned output identity and cannot validate actual media.
 dry=WORK/'dry.json'
-run('dry',['--hybrid','--dry-run','--report',dry,source,SEEDS/'hdr.mkv'],True)
+p=run('dry',['--hybrid','--dry-run','--delete-sources','--report',dry,source,SEEDS/'hdr.mkv'],True)
+assert 'deprecated and ignored' in p.stdout+p.stderr
+assert 'Would validate output and keep both originals' in p.stdout
+assert 'delete both originals' not in p.stdout+p.stderr
+assert sha(source)==original
+help_result=run('help',['--help'],True)
+assert '--delete-sources' not in help_result.stdout
 assert json.loads(dry.read_text())['validation']=='inconclusive'
 # Stall a real decoding phase after tool startup. Parent cancellation must still
 # save its terminal report. This wrapper creates no media and has no network.

@@ -4,7 +4,9 @@ use std::path::Path;
 
 use crate::exec::{run_capture, run_status, AppResult};
 use crate::logger::Logger;
-use crate::mediainfo::{hybrid_detect_dv_profile, hybrid_get_media_info, parse_int};
+use crate::mediainfo::{
+    hybrid_detect_dv_profile_from_info, hybrid_get_media_info, parse_int, InputProbe,
+};
 use crate::runtime::Runtime;
 
 use super::scenes::{
@@ -44,7 +46,7 @@ pub(crate) fn hybrid_get_rpu_frame_count(
 
 pub(crate) fn hybrid_validate_output(
     out_file: &Path,
-    hdr_target: &Path,
+    hdr_target: &InputProbe,
     rt: &Runtime,
     logger: &Logger,
 ) -> AppResult<()> {
@@ -61,7 +63,9 @@ pub(crate) fn hybrid_validate_output(
         ));
     }
 
-    let hdr_size = fs::metadata(hdr_target).map(|m| m.len()).unwrap_or(0);
+    let hdr_size = fs::metadata(&hdr_target.source)
+        .map(|m| m.len())
+        .unwrap_or(0);
     if hdr_size > 0 && out_meta.len() * 100 / hdr_size < 80 {
         return Err(format!(
             "Validation failed: output too small ({} MB vs {} MB)",
@@ -71,7 +75,7 @@ pub(crate) fn hybrid_validate_output(
     }
 
     let out_info = hybrid_get_media_info(out_file, rt, logger)?;
-    let hdr_info = hybrid_get_media_info(hdr_target, rt, logger)?;
+    let hdr_info = &hdr_target.media_info;
     if !crate::mediainfo::has_hdr10_base(&out_info) {
         return Err(
             "Validation failed: output must have a 10-bit BT.2020 PQ base layer".to_string(),
@@ -102,7 +106,10 @@ pub(crate) fn hybrid_validate_output(
         );
     }
 
-    let profile = hybrid_detect_dv_profile(out_file, rt, logger)?;
+    // The output is still freshly probed above; derive its profile from that
+    // same selected HEVC track so validation does not run a second probe that
+    // could describe a different video track.
+    let profile = hybrid_detect_dv_profile_from_info(&out_info);
     if profile != Some(8) {
         return Err(format!(
             "Validation failed: expected DV profile 8 in output, detected {:?}",
